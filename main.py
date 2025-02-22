@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 import aiomqtt
 
-import ha_mqtt
+import utils.ha_mqtt as ha_mqtt
 
 load_dotenv()
 

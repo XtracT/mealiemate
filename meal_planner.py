@@ -13,9 +13,9 @@ import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-from ha_mqtt import log
-import mealie_api
-import gpt_utils
+from utils.ha_mqtt import log
+import utils.mealie_api as mealie_api
+import utils.gpt_utils as gpt_utils
 
 SCRIPT_CONFIG = {
     "id": "meal_planner",

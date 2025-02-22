@@ -9,8 +9,8 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 
-from ha_mqtt import log
-import mealie_api
+from utils.ha_mqtt import log
+import utils.mealie_api as mealie_api
 
 SCRIPT_CONFIG = {
     "id": "mealplan_fetcher",
