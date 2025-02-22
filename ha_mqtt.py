@@ -80,7 +80,7 @@ async def setup_mqtt_sensor(script_id, sensor_id, sensor_name):
 
     log_buffers[(script_id, sensor_id)] = ""
 
-async def setup_mqtt_number(script_id, number_id, number_name, default_value=7, min_value=1, max_value=10, step=1, unit=""):
+async def setup_mqtt_number(script_id, number_id, number_name, default_value, min_value=1, max_value=10, step=1, unit=""):
     """
     Register an MQTT Number entity (input) in Home Assistant asynchronously.
     """
@@ -114,7 +114,7 @@ async def setup_mqtt_number(script_id, number_id, number_name, default_value=7, 
         await client.publish(state_topic, str(default_value), retain=True)
 
 
-async def setup_mqtt_input_text(script_id, text_id, text_name, default_value="", max_length=255):
+async def setup_mqtt_text(script_id, text_id, text_name, default_value="", max_length=255):
     """
     Register an MQTT Text entity in Home Assistant asynchronously.
     """

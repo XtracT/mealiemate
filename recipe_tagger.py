@@ -19,6 +19,17 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DRY_RUN = False
 
+SCRIPT_CONFIG = {
+    "id": "recipe_tagger",
+    "name": "Recipe Tagger",
+    "type": "automation",
+    "switch": True,
+    "sensors": {
+        "status" : {"id": "status", "name": "Tagging Progress"},
+        "feedback" : {"id": "feedback", "name": "Tagging Feedback"}
+    },
+    "execute_function": None  # Return the coroutine itself, not a Task
+}
 
 AVAILABLE_TAGS = {
     "Main Ingredient Category": [
@@ -44,8 +55,7 @@ async def recipe_tagger():
 async def classify_recipe_with_gpt(name, ingredients):
     clean_ingredients = [i.strip() for i in ingredients if i and i.strip()]
     if not clean_ingredients:
-        await log(SCRIPT_CONFIG["id"], "status",
-                  f"⚠️ Recipe '{name}' has no valid ingredients, skipping classification.")
+        await log(SCRIPT_CONFIG["id"], "status", f"⚠️ Recipe '{name}' has no valid ingredients, skipping classification.")
         return [], None
 
     prompt = (
@@ -181,17 +191,8 @@ async def main():
 
     await log(SCRIPT_CONFIG["id"], "status", "🎉 Processing complete!")
 
+# Assign main function to execute_function
+SCRIPT_CONFIG["execute_function"] = main
+
 if __name__ == "__main__":
     asyncio.run(main())
-
-SCRIPT_CONFIG = {
-    "id": "recipe_tagger",
-    "name": "Recipe Tagger",
-    "type": "automation",
-    "switch": True,
-    "sensors": [
-        {"id": "status", "name": "Tagging Progress"},
-        {"id": "feedback", "name": "Tagging Feedback"}
-    ],
-    "execute_function": main  # Return the coroutine itself, not a Task
-}

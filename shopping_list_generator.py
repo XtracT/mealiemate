@@ -17,14 +17,27 @@ from ha_mqtt import log
 import mealie_api
 import gpt_utils
 
+SCRIPT_CONFIG = {
+    "id": "shopping_list_generator",
+    "name": "Shopping List Generator",
+    "type": "automation",
+    "switch": True,
+    "sensors": {
+        "status" : {"id": "status", "name": "Shopping List Progress"},
+        "feedback" : {"id": "feedback", "name": "Shopping List Feedback"}
+    },
+    "numbers": {
+        "list_length" : {"id": "list_length", "name": "Shopping list Days Required", "value":8}
+    },
+    "execute_function": None  
+}
+
 load_dotenv()
 
 parser = argparse.ArgumentParser(description="Generate and send a shopping list to Mealie.")
 parser.add_argument("--dry-run", action="store_true", help="Run in dry mode without sending data to Mealie.")
 args = parser.parse_args()
 DRY_RUN = args.dry_run
-
-DEFAULT_NUM_DAYS = 8
 
 async def shopping_list_generator():
     """
@@ -126,11 +139,15 @@ async def clean_up_shopping_list(ingredients):
     return cleaned_list
 
 async def main():
+
+    num_days = SCRIPT_CONFIG["numbers"]["list_length"]["value"]
+
+
     list_name = f"Mealplan {datetime.today().strftime('%d %b')}"
     await log(SCRIPT_CONFIG["id"], "status", f"\n➡️ Working on your new shopping list: {list_name}")
 
     start_date = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-    end_date = (datetime.today() + timedelta(days=SCRIPT_CONFIG["parameters"]["num_days"])).strftime("%Y-%m-%d")
+    end_date = (datetime.today() + timedelta(days=num_days)).strftime("%Y-%m-%d")
     
     meal_plan = await mealie_api.get_meal_plan(start_date, end_date)
     if not meal_plan:
@@ -161,23 +178,8 @@ async def main():
 
     await log(SCRIPT_CONFIG["id"], "status", "\n✅ Done! Your Mealie shopping list is updated.")
 
+# Assign main function to execute_function
+SCRIPT_CONFIG["execute_function"] = main
+
 if __name__ == "__main__":
     asyncio.run(main())
-
-SCRIPT_CONFIG = {
-    "id": "shopping_list_generator",
-    "name": "Shopping List Generator",
-    "type": "automation",
-    "switch": True,
-    "sensors": [
-        {"id": "status", "name": "Shopping List Progress"},
-        {"id": "feedback", "name": "Shopping List Feedback"}
-    ],
-    "input_numbers": [
-        {"id": "mealplan_length", "name": "Shopping list Days Required", "default_value":DEFAULT_NUM_DAYS}
-    ],
-    "parameters": {
-        "num_days": DEFAULT_NUM_DAYS
-    },
-    "execute_function": main  # Return the coroutine itself, not a Task
-}

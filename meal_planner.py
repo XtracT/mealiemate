@@ -17,6 +17,25 @@ from ha_mqtt import log
 import mealie_api
 import gpt_utils
 
+SCRIPT_CONFIG = {
+    "id": "meal_planner",
+    "name": "Meal Planner",
+    "type": "automation",
+    "switch": True,
+    "sensors": {
+        "status" : {"id": "status", "name": "Planning Progress"},
+        "feedback" : {"id": "feedback", "name": "Planning Feedback"}
+    },
+    "numbers": {
+        "mealplan_length" : {"id": "mealplan_length", "name": "Mealplan Days Required", "value":7}
+    },
+    "texts": {
+        "mealplan_message" : {"id": "mealplan_message", "name": "Mealplan User Input", "text":"Generate a mealplan please."}
+    },
+    "execute_function": None  # Return the coroutine itself, not a Task
+}
+
+
 load_dotenv()
 
 MEALIE_TOKEN = os.environ.get("MEALIE_TOKEN")
@@ -27,9 +46,6 @@ INPUT_TEXT_ENTITY = os.environ.get("ENTITY")
 MODEL_NAME = "gpt-4o"
 TEMPERATURE = 0.1
 DRY_RUN = False
-
-DEFAULT_NUM_DAYS = 7
-DEFAULT_INPUT_MESSAGE = "Generate a mealplan please."
 
 
 DEFAULT_CONFIG = (
@@ -86,7 +102,7 @@ parser.add_argument("--config", "-c", default=DEFAULT_CONFIG, help="Configuratio
 args = parser.parse_args()
 
 
-async def async_generate_plan_and_feedback(recipes, mealplan, days):
+async def async_generate_plan_and_feedback(recipes, mealplan, days, user_message):
     """
     Calls GPT to generate meal plan JSON plus a feedback string.
     """
@@ -99,11 +115,6 @@ async def async_generate_plan_and_feedback(recipes, mealplan, days):
         "currentMealPlan": mealplan,
         "notes": args.config
     }
-
-    user_message = next(
-        (item["text"] for item in SCRIPT_CONFIG["input_texts"] if item["id"] == "mealplan_message"),
-        None  # Default value if not found
-    )
 
     messages = [
         {"role": "system", "content": json.dumps(system_prompt_data, indent=2)},
@@ -143,6 +154,9 @@ def generate_days_list(latest_date, num_days):
 async def main():
     _ = parser.parse_args()  # re-parse in case run directly
 
+    num_days = SCRIPT_CONFIG["numbers"]["mealplan_length"]["value"]
+    user_message = SCRIPT_CONFIG["texts"]["mealplan_message"]["text"]
+
     # 1) Fetch all recipes
     raw_recipes = await mealie_api.fetch_data("/api/recipes?full=true")
     if not raw_recipes or not isinstance(raw_recipes, dict):
@@ -162,7 +176,7 @@ async def main():
 
     # 2) Fetch current meal plan
     start_date = (datetime.today() - timedelta(days=31)).strftime("%Y-%m-%d")
-    end_date = (datetime.today() + timedelta(days=SCRIPT_CONFIG["parameters"]["num_days"])).strftime("%Y-%m-%d")
+    end_date = (datetime.today() + timedelta(days=num_days)).strftime("%Y-%m-%d")
     mealplan_items = await mealie_api.get_meal_plan(start_date, end_date)
     if not mealplan_items:
         await log(SCRIPT_CONFIG["id"], "status", "❌ No meal plan data available.")
@@ -170,13 +184,13 @@ async def main():
 
     # 3) Determine which days need planning
     latest_date = max((x["date"] for x in mealplan_items), default=datetime.now().strftime("%Y-%m-%d"))
-    days = generate_days_list(latest_date, SCRIPT_CONFIG["parameters"]["num_days"])
+    days = generate_days_list(latest_date, num_days)
     if not days:
         await log(SCRIPT_CONFIG["id"], "status", "✅ No days need planning")
         return
 
     # 4) GPT generate plan
-    plan, feedback = await async_generate_plan_and_feedback(recipes, mealplan_items, days)
+    plan, feedback = await async_generate_plan_and_feedback(recipes, mealplan_items, days, user_message)
     await log(SCRIPT_CONFIG["id"], "feedback", feedback)
     await log(SCRIPT_CONFIG["id"], "status", "GPT generated plan:")
 
@@ -219,27 +233,8 @@ async def main():
 
     await log(SCRIPT_CONFIG["id"], "status", "✅ Done!")
 
+# Assign main function to execute_function
+SCRIPT_CONFIG["execute_function"] = main
+
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-SCRIPT_CONFIG = {
-    "id": "meal_planner",
-    "name": "Meal Planner",
-    "type": "automation",
-    "switch": True,
-    "sensors": [
-        {"id": "status", "name": "Planning Progress"},
-        {"id": "feedback", "name": "Planning Feedback"}
-    ],
-    "input_numbers": [
-        {"id": "mealplan_length", "name": "Mealplan Days Required", "default_value":DEFAULT_NUM_DAYS}
-    ],
-    "input_texts": [
-        {"id": "mealplan_message", "name": "Mealplan User Input", "text":DEFAULT_INPUT_MESSAGE}
-    ],
-    "parameters": {
-        "num_days": DEFAULT_NUM_DAYS
-    },
-    "execute_function": main  # Return the coroutine itself, not a Task
-}

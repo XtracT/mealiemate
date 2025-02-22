@@ -25,7 +25,8 @@ MQTT_DISCOVERY_PREFIX = "homeassistant"
 running_tasks = {}
 mqtt_message_queue = asyncio.Queue()
 
-SCRIPTS = ["recipe_tagger", "meal_planner","shopping_list_generator","mealplan_fetcher"]
+SCRIPTS = ["recipe_tagger", "meal_planner", "mealplan_fetcher", "shopping_list_generator"]
+
 SCRIPT_MAP = {}
 for script_name in SCRIPTS:
     module = importlib.import_module(script_name)
@@ -37,13 +38,13 @@ async def setup_mqtt_entities():
             await ha_mqtt.setup_mqtt_switch(script_id, SCRIPT_MAP[script_id]["name"])
 
         for sensor in script["sensors"]:
-            await ha_mqtt.setup_mqtt_sensor(script_id, sensor["id"], sensor["name"])
+            await ha_mqtt.setup_mqtt_sensor(script_id, script["sensors"][sensor]["id"], script["sensors"][sensor]["name"])
 
-        for input_number in script.get("input_numbers", []):
-            await ha_mqtt.setup_mqtt_number(script_id, input_number["id"], input_number["name"], input_number["default_value"],)
+        for number in script.get("numbers", []):
+            await ha_mqtt.setup_mqtt_number(script_id, script["numbers"][number]["id"], script["numbers"][number]["name"],script["numbers"][number]["value"])
 
-        for input_text in script.get("input_texts", []):
-            await ha_mqtt.setup_mqtt_input_text(script_id, input_text["id"], input_text["name"], input_text["text"],)
+        for text in script.get("texts", []):
+            await ha_mqtt.setup_mqtt_text(script_id, script["texts"][text]["id"], script["texts"][text]["name"],script["texts"][text]["text"])
 
     await ha_mqtt.setup_mqtt_service_status("mealiemate", "status", "MealieMate Status")
 
@@ -101,7 +102,7 @@ async def process_message(topic, payload):
         raw_id = raw_id.removeprefix("mealiemate_")
 
     script_id = None
-    sensor_id = None
+    entity_id = None
 
     # Try each known script in SCRIPT_MAP
     for candidate_id in SCRIPT_MAP:
@@ -109,10 +110,8 @@ async def process_message(topic, payload):
         if raw_id.startswith(candidate_id):
             script_id = candidate_id
             # The rest after the underscore is the suffix
-            sensor_id = raw_id[len(candidate_id + "_"):]  # e.g. "mealplan_length"
+            entity_id = raw_id[len(candidate_id + "_"):]  # e.g. "mealplan_length"
             break
-
-    print(script_id + ' ; '+ sensor_id)
 
     if script_id not in SCRIPT_MAP:
         print(f"⚠️ Unknown script: {script_id}")
@@ -120,10 +119,9 @@ async def process_message(topic, payload):
     
     if "number" in topic:
         try:
-            ## TODO: update this so that everything is in input numbers 
             value = int(payload)
-            SCRIPT_MAP[script_id]["parameters"]["num_days"] = value
-            print(f"📊 Updated {script_id} parameter: days = {value}")
+            SCRIPT_MAP[script_id]["numbers"][entity_id]["value"] = value
+            print(f"📊 Updated {script_id} number {entity_id}: {value}")
         except ValueError:
             print(f"⚠️ Invalid number received: {payload}")
         return
@@ -131,11 +129,8 @@ async def process_message(topic, payload):
     if "text" in topic:
         try:
             text = str(payload)
-            for item in SCRIPT_MAP[script_id].get("input_texts", []):
-                if item.get("id") == sensor_id:  # Find the correct input_text entry
-                    item["text"] = text  # Update the value
-
-            print(f"📊 Updated {script_id} {sensor_id}: {text}")
+            SCRIPT_MAP[script_id]["texts"][entity_id]["text"] = text
+            print(f"📊 Updated {script_id} text {entity_id}: {text}")
         except ValueError:
             print(f"⚠️ Invalid string received: {payload}")
         return

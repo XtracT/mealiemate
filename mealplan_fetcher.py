@@ -17,32 +17,13 @@ SCRIPT_CONFIG = {
     "name": "Meal Plan Fetcher",
     "type": "automation",
     "switch": True,
-    "sensors": [
-        {"id": "mealplan", "name": "Formatted Meal Plan"}
-    ],
-    "parameters": {
-        "num_days": 7  # Fetch for today + next 6 days
-    },
-    "input_texts": [
-        {"id": "mealie_url", "name": "mealie_url", "text": "https://mealie.domain.com"}
-    ],
-    "execute_function": None  # Will be set to main()
-}
-
-""" 
-#This is how it should be: 
-SCRIPT_CONFIG = {
-    "id": "mealplan_fetcher",
-    "name": "Meal Plan Fetcher",
-    "type": "automation",
-    "switch": True,
     "sensors": {
         "mealplan": {"id": "mealplan", "name": "Formatted Meal Plan"}
     },
-    "parameters": {
-        "num_days": 7  # Fetch for today + next 6 days
+    "numbers": {
+        "num_days": {"id": "num_days", "name": "Fetcher Days","value": 7 }
     },
-    "input_texts": {  # Now correctly structured as a dictionary
+    "texts": {
         "mealie_url": {
             "id": "mealie_url",
             "name": "mealie_url",
@@ -51,7 +32,7 @@ SCRIPT_CONFIG = {
     },
     "execute_function": None  # Will be set to main()
 } 
-"""
+
 
 def generate_markdown_table(mealplan, mealie_url):
     """
@@ -89,8 +70,8 @@ async def main():
     """
     Main function that fetches meal plans and logs them in Markdown format.
     """
-    num_days = SCRIPT_CONFIG["parameters"]["num_days"]
-    mealie_url = SCRIPT_CONFIG["input_texts"][0]["text"]
+    num_days = SCRIPT_CONFIG["numbers"]["num_days"]["value"]
+    mealie_url = SCRIPT_CONFIG["texts"]["mealie_url"]["text"]
 
     # Determine date range
     start_date = datetime.today().strftime("%Y-%m-%d")
