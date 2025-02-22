@@ -80,7 +80,7 @@ async def setup_mqtt_sensor(script_id, sensor_id, sensor_name):
 
     log_buffers[(script_id, sensor_id)] = ""
 
-async def setup_mqtt_number(script_id, number_id, number_name, default_value=7, min_value=1, max_value=10, step=1, unit="days"):
+async def setup_mqtt_number(script_id, number_id, number_name, default_value=7, min_value=1, max_value=10, step=1, unit=""):
     """
     Register an MQTT Number entity (input) in Home Assistant asynchronously.
     """
@@ -99,6 +99,7 @@ async def setup_mqtt_number(script_id, number_id, number_name, default_value=7, 
         "step": step,
         "mode": "box",
         "unit_of_measurement": unit,
+        "retain": True,
         "device": {
             "identifiers": ["mealiemate"],
             "name": "MealieMate",
@@ -129,6 +130,7 @@ async def setup_mqtt_input_text(script_id, text_id, text_name, default_value="",
         "unique_id": unique_id,
         "mode": "text",  # Ensures it is treated as a text field
         "max": max_length,
+        "retain": True,
         "device": {
             "identifiers": ["mealiemate"],
             "name": "MealieMate",
