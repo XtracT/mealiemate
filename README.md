@@ -1,6 +1,6 @@
 # MealieMate
 
-MealieMate is a collection of Python scripts and services that integrate with [Mealie](https://github.com/hay-kot/mealie), [Home Assistant](https://www.home-assistant.io/), and [MQTT](https://mqtt.org/) to provide advanced meal planning, recipe tagging, and shopping list generation—powered by OpenAI GPT. Each script can be controlled via switches in Home Assistant, and logs its progress and feedbacks in several sensors.
+MealieMate is a collection of Python scripts bundled in a service that integrate with [Mealie](https://github.com/hay-kot/mealie), [Home Assistant](https://www.home-assistant.io/), and [MQTT](https://mqtt.org/) to provide advanced meal planning, recipe tagging, and shopping list generation—powered by OpenAI GPT. Each script can be controlled via switches in Home Assistant, and logs its progress and feedback in several sensors.
 
 *Disclaimer*: This is a project to help me learn different things, I am just sharing it openly to learn even more. 
 
@@ -16,6 +16,9 @@ MealieMate is a collection of Python scripts and services that integrate with [M
 
 3. **Shopping List Generator**  
    Consolidates ingredients from your upcoming meal plan into a single structured shopping list in Mealie, which can be easily cleaned up looking at the pantry.
+
+5. **Mealplan Fetcher**  
+   Gets the mealplan for the next 7 days and makes it available in Home Assistant, including direct links to every recipe.
 
 ---
 

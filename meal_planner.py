@@ -105,8 +105,6 @@ async def async_generate_plan_and_feedback(recipes, mealplan, days):
         None  # Default value if not found
     )
 
-    print(user_message)
-
     messages = [
         {"role": "system", "content": json.dumps(system_prompt_data, indent=2)},
         {"role": "user", "content": user_message}
