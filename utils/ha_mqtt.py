@@ -80,7 +80,7 @@ async def setup_mqtt_sensor(script_id, sensor_id, sensor_name):
 
     log_buffers[(script_id, sensor_id)] = ""
 
-async def setup_mqtt_number(script_id, number_id, number_name, default_value, min_value=1, max_value=10, step=1, unit=""):
+async def setup_mqtt_number(script_id, number_id, number_name, default_value, min_value=1, max_value=1000, step=1, unit=""):
     """
     Register an MQTT Number entity (input) in Home Assistant asynchronously.
     """
@@ -170,7 +170,7 @@ async def setup_mqtt_service_status(script_id, sensor_id, sensor_name):
     async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
         await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
 
-async def log(script_id, sensor_id, message):
+async def log(script_id, sensor_id, message, reset=False):
     """
     Log messages to a Home Assistant MQTT sensor by appending to an attribute field.
     """
@@ -179,6 +179,9 @@ async def log(script_id, sensor_id, message):
     if (script_id, sensor_id) not in log_buffers:
         # Sensor not initialized, no need to publish MQTT log.
         return
+    
+    if reset:
+        log_buffers[(script_id, sensor_id)] = ""
 
     log_buffers[(script_id, sensor_id)] += message + "\n"
 

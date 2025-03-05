@@ -25,7 +25,7 @@ MQTT_DISCOVERY_PREFIX = "homeassistant"
 running_tasks = {}
 mqtt_message_queue = asyncio.Queue()
 
-SCRIPTS = ["recipe_tagger", "meal_planner", "mealplan_fetcher", "shopping_list_generator"]
+SCRIPTS = ["recipe_tagger", "meal_planner", "mealplan_fetcher", "shopping_list_generator", "neapolitan_pizza"]
 
 SCRIPT_MAP = {}
 for script_name in SCRIPTS:
