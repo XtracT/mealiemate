@@ -18,7 +18,7 @@ MealieMate is a collection of Python scripts bundled in a service that integrate
    Consolidates ingredients from your upcoming meal plan into a single structured shopping list in Mealie, which can be easily cleaned up looking at the pantry.
 
 5. **Mealplan Fetcher**  
-   Gets the mealplan for the next 7 days and makes it available in Home Assistant, including direct links to every recipe.
+   Gets the mealplan for the next 7 days and makes it available in Home Assistant, including direct links to every recipe. Also generates an image that can be sent via Telegram using a bot. 
 
 ---
 
@@ -60,6 +60,8 @@ services:
       HA_TOKEN: "insert_here"
       MQTT_BROKER: "192.168.XX.XX"
       MQTT_PORT: "1883"
+      TG_BOT_TOKEN: "123456789:AAbbCCddEEffGGhhIIjjKKllMMnnOO00"
+      TG_BOT_CHAT_ID: "123456789"
     restart: unless-stopped
 ```
 
