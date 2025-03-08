@@ -35,7 +35,6 @@ SCRIPT_CONFIG = {
     "execute_function": None  # Return the coroutine itself, not a Task
 }
 
-
 load_dotenv()
 
 MEALIE_TOKEN = os.environ.get("MEALIE_TOKEN")
@@ -46,7 +45,6 @@ INPUT_TEXT_ENTITY = os.environ.get("ENTITY")
 MODEL_NAME = "gpt-4o"
 TEMPERATURE = 0.1
 DRY_RUN = False
-
 
 DEFAULT_CONFIG = (
     "You are a **meal planner AI** responsible for generating structured, healthy, and balanced meal plans "
@@ -81,6 +79,7 @@ DEFAULT_CONFIG = (
     "- **Salads:** Preferably for **dinners** to keep meals light.\n"
     "- **Balanced Variety:** Ensure **protein, vegetables, and carbs** are included daily.\n"
     "- **Diversity:** Avoid repeating the **same main ingredient** two days in a row.\n"
+    "- **Rotation:** Avoid selecting the same recipes as the previous two weeks when possible."
     "- **User Priorities:** Consider ingredients that are expiring soon (if provided).\n\n"
     
     "**❌ Forbidden:**\n"
@@ -108,7 +107,6 @@ async def async_generate_plan_and_feedback(recipes, mealplan, days, user_message
     """
     await log(SCRIPT_CONFIG["id"], "status", "Asking ChatGPT to Generate Mealplan...")
 
-
     system_prompt_data = {
         "days": days,
         "recipesCatalog": recipes,
@@ -132,6 +130,7 @@ async def async_generate_plan_and_feedback(recipes, mealplan, days, user_message
         }
         for day, slots in meal_plan_obj.items()
     }
+
     return plan_days, feedback_str
 
 
@@ -167,7 +166,7 @@ async def main():
         {
             "id": r["id"],
             "name": r["name"],
-            "description": r["description"],
+            # "description": r["description"], #Description of the recipe adds no value to GPT to choose mealplan
             "tags": [t["name"] for t in r.get("tags", [])],
             "categories": [c["name"] for c in r.get("recipeCategory", [])]
         }
@@ -175,12 +174,20 @@ async def main():
     ]
 
     # 2) Fetch current meal plan
-    start_date = (datetime.today() - timedelta(days=31)).strftime("%Y-%m-%d")
+    start_date = (datetime.today() - timedelta(days=15)).strftime("%Y-%m-%d")
     end_date = (datetime.today() + timedelta(days=num_days)).strftime("%Y-%m-%d")
     mealplan_items = await mealie_api.get_meal_plan(start_date, end_date)
     if not mealplan_items:
         await log(SCRIPT_CONFIG["id"], "status", "❌ No meal plan data available.")
         return
+        
+    mealplan = [
+        {
+            "date": r["date"],
+            "recipeId": r["recipeId"]
+        }
+        for r in mealplan_items
+    ]
 
     # 3) Determine which days need planning
     latest_date = max((x["date"] for x in mealplan_items), default=datetime.now().strftime("%Y-%m-%d"))
@@ -190,7 +197,7 @@ async def main():
         return
 
     # 4) GPT generate plan
-    plan, feedback = await async_generate_plan_and_feedback(recipes, mealplan_items, days, user_message)
+    plan, feedback = await async_generate_plan_and_feedback(recipes, mealplan, days, user_message)
     await log(SCRIPT_CONFIG["id"], "feedback", feedback)
     await log(SCRIPT_CONFIG["id"], "status", "GPT generated plan:")
 
