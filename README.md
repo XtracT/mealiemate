@@ -11,16 +11,19 @@ MealieMate is a collection of Python scripts bundled in a service that integrate
 1. **Recipe Tagger**  
    Uses GPT to classify your Mealie recipes with appropriate tags and categories automatically. The AI analyzes recipe ingredients and names to assign relevant tags from predefined categories.
 
-2. **Meal Planner**  
+2. **Ingredient Merger**  
+   Identifies ingredients across recipes that are exact duplicates but have different names (like "heavy cream" and "cream 15% fat", or "parmesan" and "parmeggiano"). Provides a standardized name and lists all recipes containing these ingredients for easier database cleanup.
+
+3. **Meal Planner**  
    Generates structured, balanced meal plans based on Mealie recipes (tags and categories), user constraints, and existing plans. Follows specific rules like scheduling pizza on Fridays and ensuring nutritional balance.
 
-3. **Shopping List Generator**  
+4. **Shopping List Generator**  
    Consolidates ingredients from your upcoming meal plan into a single structured shopping list in Mealie. The AI intelligently combines similar items, standardizes quantities, and organizes by category for easier shopping.
 
-4. **Mealplan Fetcher**  
+5. **Mealplan Fetcher**  
    Gets the mealplan for the next 7 days and makes it available in Home Assistant, including direct links to every recipe. Also generates a visually appealing image that can be sent via Telegram using a bot.
 
-5. **Neapolitan Pizza Calculator**  
+6. **Neapolitan Pizza Calculator**  
    Calculates precise dough ingredients and fermentation schedules for Neapolitan-style pizza based on temperature and time parameters. Uses a scientific approach to adjust yeast quantities for consistent results.
 
 ---

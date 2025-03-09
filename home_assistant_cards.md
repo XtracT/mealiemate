@@ -35,7 +35,38 @@ cards:
 
 ---
 
-## 2. Meal Planner Card
+## 2. Ingredient Merger Card
+
+**Purpose:**  
+This card manages the Ingredient Merger plugin and displays feedback messages for ingredient merging suggestions.
+
+**YAML:**
+```yaml
+type: custom:stack-in-card
+mode: vertical
+style: |
+  ha-card {
+    --stack-card-divider-color: transparent;
+  }
+cards:
+  - type: custom:mushroom-template-card
+    primary: Ingredient Merger
+    icon: mdi:food-variant
+    entity: switch.mealiemate_ingredient_merger
+    icon_color: |-
+      {% if is_state('switch.mealiemate_ingredient_merger', 'on') %}
+        blue
+      {% else %}
+        grey
+      {% endif %}
+  - type: markdown
+    content: |
+      {{ state_attr('sensor.mealiemate_merger_feedback', 'full_text') }}
+```
+
+---
+
+## 3. Meal Planner Card
 
 **Purpose:**  
 This card is designed for the Meal Planner plugin. It provides inputs for required parameters and displays feedback messages.
@@ -98,7 +129,7 @@ cards:
 
 ---
 
-## 3. Meal Plan Fetcher Card
+## 4. Meal Plan Fetcher Card
 
 **Purpose:**  
 This card provides functionality for the Meal Plan Fetcher plugin. It includes an input for specifying the number of days and displays the formatted meal plan.
@@ -152,7 +183,7 @@ cards:
 
 ---
 
-## 4. Shopping List Generator Card
+## 5. Shopping List Generator Card
 
 **Purpose:**  
 This card is for the Shopping List Generator plugin. It provides a number input to specify how many days the shopping list should cover and displays feedback messages.
@@ -206,7 +237,7 @@ cards:
 
 ---
 
-## 5. Neapolitan Pizza Card
+## 6. Neapolitan Pizza Card
 
 **Purpose:**  
 This card handles the Neapolitan Pizza plugin. It allows you to input various parameters for your pizza dough and displays the resulting pizza dough recipe in full detail.
@@ -353,7 +384,7 @@ cards:
 
 ---
 
-## 6. System Status Card
+## 7. System Status Card
 
 **Purpose:**  
 This card provides an overview of the overall system status. It displays a binary sensor for the main MealieMate status and a sensor for the fetcher status, allowing you to quickly assess system health.

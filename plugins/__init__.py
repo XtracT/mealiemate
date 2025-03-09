@@ -10,11 +10,13 @@ from plugins.meal_planner import MealPlannerPlugin
 from plugins.shopping_list_generator import ShoppingListGeneratorPlugin
 from plugins.mealplan_fetcher import MealplanFetcherPlugin
 from plugins.neapolitan_pizza import NeapolitanPizzaPlugin
+from plugins.ingredient_merger import IngredientMergerPlugin
 
 __all__ = [
     'RecipeTaggerPlugin',
     'MealPlannerPlugin',
     'ShoppingListGeneratorPlugin',
     'MealplanFetcherPlugin',
-    'NeapolitanPizzaPlugin'
+    'NeapolitanPizzaPlugin',
+    'IngredientMergerPlugin'
 ]
