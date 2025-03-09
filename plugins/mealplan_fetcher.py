@@ -2,7 +2,7 @@
 Module: mealplan_fetcher
 ------------------------
 This module performs the following tasks:
-  1. Fetches the upcoming meal plan (today + next 6 days) from Mealie.
+  1. Fetches the upcoming meal plan (next 7 days, skipping today) from Mealie.
   2. Logs the meal plan in Markdown format via MQTT.
   3. Generates a 480x800 PNG image of the meal plan.
   4. Sends the generated image directly to a Telegram chat using credentials loaded from a .env file.
@@ -13,7 +13,7 @@ Requirements:
   - Pillow
 
 Configuration:
-  - Place your TTF font file (e.g. "January Night.ttf") in the same directory as this script.
+  - Font files are stored in the 'fonts' directory at the project root.
   - Set environment variables in .env file (see README.md for details).
 """
 
@@ -62,9 +62,10 @@ class MealplanFetcherPlugin(Plugin):
         self._image_config = {
             "width": 480,
             "height": 800,
-            "top_margin": 5,
-            "day_label_height": 40,
-            "day_label_v_offset": -2,
+            "top_margin": 2,  # 2 pixels at the top
+            "day_label_height": 40,  # 40 pixels for each day title
+            "meal_space_height": 74,  # 74 pixels for meal space
+            "day_label_v_offset": -12,
             "meals_v_offset": -5,
             "box_width": 200,
             "box_radius": 15,
@@ -162,29 +163,30 @@ class MealplanFetcherPlugin(Plugin):
 
         return "\n".join([header, separator] + rows)
 
-    def load_font(self, font_name: str, size: int) -> ImageFont.ImageFont:
+    def load_font(self, font_path: str, size: int) -> ImageFont.ImageFont:
         """
         Load a font file with error handling.
         
         Args:
-            font_name: Name of the font file
+            font_path: Path to the font file (relative to project root)
             size: Font size
             
         Returns:
             Loaded font or default font if not found
         """
         base_dir = Path(__file__).parent.parent.absolute()
-        font_path = base_dir / font_name
+        full_font_path = base_dir / font_path
         
         try:
-            return ImageFont.truetype(str(font_path), size)
+            return ImageFont.truetype(str(full_font_path), size)
         except IOError:
-            logger.warning(f"Font file '{font_name}' not found, falling back to default font")
+            logger.warning(f"Font file '{font_path}' not found, falling back to default font")
             return ImageFont.load_default()
 
     def get_meal_data(self, mealplan: Dict[str, Dict[str, Dict]], num_days: int = 7) -> Tuple[List[str], List[str], List[str]]:
         """
         Extract day names, lunch and dinner data from the meal plan.
+        Skips today and fetches the following 7 days.
         
         Args:
             mealplan: Dictionary of meal plan entries
@@ -193,11 +195,11 @@ class MealplanFetcherPlugin(Plugin):
         Returns:
             Tuple of (day_names, lunches, dinners) lists
         """
-        today = datetime.today().date()
+        tomorrow = datetime.today().date() + timedelta(days=1)
         day_names, lunches, dinners = [], [], []
 
         for i in range(num_days):
-            current_date = today + timedelta(days=i)
+            current_date = tomorrow + timedelta(days=i)
             weekday_name = current_date.strftime("%A").upper()
             day_str = current_date.strftime("%Y-%m-%d")
             
@@ -271,12 +273,10 @@ class MealplanFetcherPlugin(Plugin):
         rect_w = x_right - x_left
         rect_h = y_bottom - y_top
 
-        line_heights = []
-        for ln in lines:
-            bbox = draw.textbbox((0, 0), ln, font=font)
-            line_heights.append(bbox[3] - bbox[1])
+        # Calculate standard line height for consistency
+        standard_line_height = draw.textbbox((0, 0), "Aj", font=font)[3] - draw.textbbox((0, 0), "Aj", font=font)[1]
             
-        total_text_height = sum(line_heights) + line_spacing * (len(lines) - 1)
+        total_text_height = standard_line_height * len(lines) + line_spacing * (len(lines) - 1)
         current_y = y_top + (rect_h - total_text_height) // 2 + v_offset
 
         for i, ln in enumerate(lines):
@@ -284,15 +284,15 @@ class MealplanFetcherPlugin(Plugin):
             lw = bbox[2] - bbox[0]
             x_line = x_left + (rect_w - lw) // 2
             draw.text((x_line, current_y), ln, font=font, fill=fill)
-            current_y += line_heights[i] + (line_spacing if i < len(lines) - 1 else 0)
+            current_y += standard_line_height + (line_spacing if i < len(lines) - 1 else 0)
 
     def generate_mealplan_png(self, mealplan: Dict[str, Dict[str, Dict]]) -> Image.Image:
         """
         Generates a rotated meal plan image (480x800 portrait rotated 90°) in memory.
         
         The image contains:
-          - A 5-pixel top margin.
-          - Centered, rounded red day label boxes (200px wide) for the next 7 days (today + 6),
+          - A 2-pixel top margin.
+          - Centered, rounded red day label boxes (200px wide) for the next 7 days,
             with the actual day names.
           - A thin horizontal red line across the full width, aligned with the middle of each box.
           - Two columns for meal text (Lunch and Dinner) in the remaining space.
@@ -332,53 +332,69 @@ class MealplanFetcherPlugin(Plugin):
         draw = ImageDraw.Draw(img)
 
         # Load fonts
-        FONT_DAY = self.load_font("January Night.ttf", 38)
-        FONT_MEAL = self.load_font("January Night.ttf", 28)
+        FONT_DAY = self.load_font("fonts/PatrickHand-Regular.ttf", 38)
+        FONT_MEAL = self.load_font("fonts/PatrickHand-Regular.ttf", 28)
 
-        # Layout the days vertically
-        effective_height = HEIGHT - TOP_MARGIN
-        day_height_float = effective_height / NUM_DAYS
-        accum_h = 0.0
-
+        # Simple fixed layout with exact pixel measurements
+        # Each day gets an equal portion of the height
+        day_section_height = (HEIGHT - TOP_MARGIN) // NUM_DAYS
+        
         for i in range(NUM_DAYS):
-            # Compute vertical boundaries for each day's row
-            top = TOP_MARGIN + int(round(accum_h))
-            accum_h += day_height_float
-            bottom = TOP_MARGIN + int(round(accum_h))
-
-            # Define red day label box (centered horizontally)
+            # Calculate the top position for this day's section
+            section_top = TOP_MARGIN + (i * day_section_height)
+            
+            # Calculate the center of the day label box
+            box_center_y = section_top + (DAY_LABEL_HEIGHT // 2)
+            
+            # Calculate the top and bottom of the day label box
+            box_top = box_center_y - (DAY_LABEL_HEIGHT // 2)
+            box_bottom = box_center_y + (DAY_LABEL_HEIGHT // 2)
+            
+            # Define the horizontal position of the day label box (centered)
             box_left = (WIDTH - BOX_WIDTH) // 2
             box_right = box_left + BOX_WIDTH
-            box_top = top
-            box_bottom = box_top + BOX_HEIGHT
-
-            # Draw rounded red day label box
-            draw.rounded_rectangle([(box_left, box_top), (box_right, box_bottom)],
-                                radius=BOX_RADIUS, fill=RED)
-
-            # Draw horizontal red line across full width, aligned with the box's center
-            line_y = box_top + (BOX_HEIGHT // 2)
-            draw.rectangle([(0, line_y - (LINE_HEIGHT // 2)), (WIDTH, line_y + (LINE_HEIGHT // 2))],
-                        fill=RED)
-
-            # Draw the day label text centered in the red box
+            
+            # Draw the red day label box
+            draw.rounded_rectangle(
+                [(box_left, box_top), (box_right, box_bottom)],
+                radius=BOX_RADIUS, 
+                fill=RED
+            )
+            
+            # Draw the horizontal red line across the full width
+            line_y = box_center_y
+            draw.rectangle(
+                [(0, line_y - (LINE_HEIGHT // 2)), (WIDTH, line_y + (LINE_HEIGHT // 2))],
+                fill=RED
+            )
+            
+            # Draw the day name text centered in the box
             day_name = day_names[i]
             bbox_day = draw.textbbox((0, 0), day_name, font=FONT_DAY)
             day_text_w = bbox_day[2] - bbox_day[0]
+            day_text_h = bbox_day[3] - bbox_day[1]
+            
             day_text_x = (WIDTH - day_text_w) // 2
-            day_text_y = box_top + (BOX_HEIGHT - bbox_day[3]) // 2 + DAY_LABEL_V_OFFSET
+            day_text_y = box_top + ((DAY_LABEL_HEIGHT - day_text_h) // 2) + DAY_LABEL_V_OFFSET
+            
             draw.text((day_text_x, day_text_y), day_name, font=FONT_DAY, fill=DAY_TEXT_COLOR)
-
-            # Define the meals area (the space below the red box)
+            
+            # Calculate the meal area (below the day label box)
             meals_top = box_bottom
-            meals_bottom = bottom
-
-            # Left column (Lunch)
+            
+            # For all days except the last, the meal area extends to the top of the next day's section
+            if i < NUM_DAYS - 1:
+                meals_bottom = TOP_MARGIN + ((i + 1) * day_section_height)
+            else:
+                # For the last day, extend to the bottom of the image
+                meals_bottom = HEIGHT
+            
+            # Draw the lunch (left column)
             left_rect = (0, meals_top, COLUMN_SEPARATOR_X, meals_bottom)
             lunch_lines = self.wrap_text(lunches[i], FONT_MEAL, (COLUMN_SEPARATOR_X - 20), draw)
             self.draw_lines_centered(draw, lunch_lines, FONT_MEAL, left_rect, BLACK, line_spacing=5, v_offset=MEALS_V_OFFSET)
-
-            # Right column (Dinner)
+            
+            # Draw the dinner (right column)
             right_rect = (COLUMN_SEPARATOR_X, meals_top, WIDTH, meals_bottom)
             dinner_lines = self.wrap_text(dinners[i], FONT_MEAL, (WIDTH - COLUMN_SEPARATOR_X - 20), draw)
             self.draw_lines_centered(draw, dinner_lines, FONT_MEAL, right_rect, BLACK, line_spacing=5, v_offset=MEALS_V_OFFSET)
@@ -434,9 +450,10 @@ class MealplanFetcherPlugin(Plugin):
         num_days = self._num_days
         mealie_url = self._mealie_url
 
-        # Determine date range
-        start_date = datetime.today().strftime("%Y-%m-%d")
-        end_date = (datetime.today() + timedelta(days=num_days - 1)).strftime("%Y-%m-%d")
+        # Determine date range - skip today, get the next 7 days
+        tomorrow = datetime.today().date() + timedelta(days=1)
+        start_date = tomorrow.strftime("%Y-%m-%d")
+        end_date = (tomorrow + timedelta(days=num_days - 1)).strftime("%Y-%m-%d")
 
         # Fetch meal plan from Mealie
         await self._mqtt.info(self.id, "Fetching meal plan from Mealie...", category="data")
