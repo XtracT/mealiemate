@@ -301,7 +301,8 @@ async def log(
     reset: bool = False, 
     level: int = INFO,
     category: Optional[str] = None,
-    log_to_ha: bool = True
+    log_to_ha: bool = True,
+    log_to_console: bool = True
 ) -> bool:
     """
     Enhanced log function that handles both console and Home Assistant logging.
@@ -337,19 +338,19 @@ async def log(
     formatted_message = f"{emoji} {message}" if emoji else message
     
     # Log to console with appropriate level
-    if level == DEBUG:
-        logger.debug(f"[{script_id}] {formatted_message}")
-    elif level == INFO:
-        logger.info(f"[{script_id}] {formatted_message}")
-    elif level == WARNING:
-        logger.warning(f"[{script_id}] {formatted_message}")
-    elif level == ERROR:
-        logger.error(f"[{script_id}] {formatted_message}")
-    elif level == CRITICAL:
-        logger.critical(f"[{script_id}] {formatted_message}")
+    if log_to_console:
+        if level == DEBUG:
+            logger.debug(f"[{script_id}] {formatted_message}")
+        elif level == INFO:
+            logger.info(f"[{script_id}] {formatted_message}")
+        elif level == WARNING:
+            logger.warning(f"[{script_id}] {formatted_message}")
+        elif level == ERROR:
+            logger.error(f"[{script_id}] {formatted_message}")
+        elif level == CRITICAL:
+            logger.critical(f"[{script_id}] {formatted_message}")
     
     # Always print to console for visibility
-    print(formatted_message)
     
     # Only log to Home Assistant if requested and level is appropriate
     # (DEBUG messages are typically not logged to HA)
@@ -387,33 +388,33 @@ async def log(
 # Convenience functions for different log levels
 async def debug(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log a debug message (not sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=DEBUG, category=category, log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=DEBUG, category=category, log_to_ha=False, log_to_console=True)
 
 async def info(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log an info message."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category=category, log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category=category, log_to_ha=False, log_to_console=True)
 
 async def warning(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log a warning message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=WARNING, category=category)
+    return await log(script_id, sensor_id or "status", message, level=WARNING, category=category, log_to_ha=True, log_to_console=True)
 
 async def error(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log an error message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=ERROR, category=category)
+    return await log(script_id, sensor_id or "status", message, level=ERROR, category=category, log_to_ha=True, log_to_console=True)
 
 async def critical(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log a critical message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=CRITICAL, category=category)
+    return await log(script_id, sensor_id or "status", message, level=CRITICAL, category=category, log_to_ha=True, log_to_console=True)
 
 # Special purpose logging functions
 async def gpt_decision(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
     """Log a GPT decision (always sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="gpt", log_to_ha=True)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="gpt", log_to_ha=True, log_to_console=False)
 
 async def progress(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
     """Log a progress update."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="progress", log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="progress", log_to_ha=False, log_to_console=True)
 
 async def success(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
     """Log a success message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=True)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=True, log_to_console=False)

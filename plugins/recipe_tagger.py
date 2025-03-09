@@ -154,7 +154,7 @@ class RecipeTaggerPlugin(Plugin):
 
         # Call GPT
         messages = [{"role": "user", "content": prompt}]
-        logger.info(f"Classifying recipe: {name}")
+        logger.debug(f"Classifying recipe: {name}")
         result = await self._gpt.gpt_json_chat(messages, model=self._model_name, temperature=self._temperature)
 
         # Extract and validate tags
@@ -317,7 +317,7 @@ class RecipeTaggerPlugin(Plugin):
 
             stats["total_recipes"] = len(recipes)
             await self._mqtt.success(self.id, f"Fetched {len(recipes)} recipes.")
-            logger.info(f"Fetched {len(recipes)} recipes from Mealie")
+            logger.debug(f"Fetched {len(recipes)} recipes from Mealie")
 
             # 2. Preload tags and categories
             await self._mqtt.info(self.id, "Preloading Mealie tags & categories...", category="data")
@@ -328,13 +328,13 @@ class RecipeTaggerPlugin(Plugin):
             tag_mapping = {t["name"].lower(): t for t in all_tags}
             category_mapping = {c["name"].lower(): c for c in all_categories}
             
-            logger.info(f"Preloaded {len(all_tags)} tags and {len(all_categories)} categories")
+            logger.debug(f"Preloaded {len(all_tags)} tags and {len(all_categories)} categories")
 
             # 3. Process each recipe
             for index, recipe in enumerate(recipes):
                 try:
                     slug = recipe["slug"]
-                    logger.info(f"Processing recipe {index+1}/{len(recipes)}: {slug}")
+                    logger.debug(f"Processing recipe {index+1}/{len(recipes)}: {slug}")
                     
                     # Get detailed recipe information
                     details = await self._mealie.get_recipe_details(slug)
