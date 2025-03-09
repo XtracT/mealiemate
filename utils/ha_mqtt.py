@@ -319,20 +319,23 @@ async def log(
     Returns:
         True if logging was successful, False otherwise
     """
-    # Determine emoji based on level and category
+    # Determine emoji based on level and category; explicitly disable icons for 'data'
     emoji = ""
-    if category and category in EMOJI_MAP:
-        emoji = EMOJI_MAP[category]
-    elif level == DEBUG:
-        emoji = EMOJI_MAP["debug"]
-    elif level == INFO:
-        emoji = EMOJI_MAP["info"]
-    elif level == WARNING:
-        emoji = EMOJI_MAP["warning"]
-    elif level == ERROR:
-        emoji = EMOJI_MAP["error"]
-    elif level == CRITICAL:
-        emoji = EMOJI_MAP["critical"]
+    if category == "data":
+        emoji = ""
+    else:
+        if category and category in EMOJI_MAP:
+            emoji = EMOJI_MAP[category]
+        elif level == DEBUG:
+            emoji = EMOJI_MAP["debug"]
+        elif level == INFO:
+            emoji = EMOJI_MAP["info"]
+        elif level == WARNING:
+            emoji = EMOJI_MAP["warning"]
+        elif level == ERROR:
+            emoji = EMOJI_MAP["error"]
+        elif level == CRITICAL:
+            emoji = EMOJI_MAP["critical"]
     
     # Format message with emoji
     formatted_message = f"{emoji} {message}" if emoji else message

@@ -474,7 +474,7 @@ class MealplanFetcherPlugin(Plugin):
 
         # Generate Markdown table and log via MQTT
         mealplan_markdown = self.generate_markdown_table(mealplan, mealie_url)
-        await self._mqtt.log(self.id, "mealplan", mealplan_markdown)
+        await self._mqtt.log(self.id, "mealplan", mealplan_markdown, category="data")
         await self._mqtt.success(self.id, "Meal plan fetched and logged.")
 
         # Generate the PNG image (in memory)
