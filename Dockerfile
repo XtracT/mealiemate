@@ -56,14 +56,15 @@ USER mealiemate
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD python -c "import asyncio, sys; \
-                 from utils.mealie_api import fetch_data; \
-                 sys.exit(0 if asyncio.run(fetch_data('/api/app/about')) else 1)"
+                 from services.mealie_api_service import MealieApiServiceImpl; \
+                 service = MealieApiServiceImpl(); \
+                 sys.exit(0 if asyncio.run(service.fetch_data('/api/app/about')) else 1)"
 
 # Use tini as init system
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Command to run the application
-CMD ["python", "-m", "main.py"]
+CMD ["python", "main.py"]
 
 # Labels
 LABEL org.opencontainers.image.title="MealieMate" \
