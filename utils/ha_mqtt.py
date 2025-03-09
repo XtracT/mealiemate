@@ -2,10 +2,13 @@
 Module: ha_mqtt
 ----------------
 Provides helper functions for registering and updating MQTT entities in Home Assistant,
-plus a log() function for appending messages to MQTT sensors.
+plus enhanced logging functions for both console and Home Assistant sensors.
 
-This module handles MQTT discovery for Home Assistant integration, allowing MealieMate
-to register switches, sensors, numbers, and text inputs automatically.
+This module handles:
+1. MQTT discovery for Home Assistant integration
+2. Registering switches, sensors, numbers, and text inputs
+3. Standardized logging with consistent emoji usage
+4. Filtering logs to ensure Home Assistant sensors only receive important information
 """
 
 import os
@@ -34,6 +37,37 @@ if not MQTT_BROKER:
 
 # Buffers used to store log text for each sensor before publishing
 log_buffers: Dict[Tuple[str, str], str] = {}
+
+# Log level constants
+DEBUG = logging.DEBUG
+INFO = logging.INFO
+WARNING = logging.WARNING
+ERROR = logging.ERROR
+CRITICAL = logging.CRITICAL
+
+# Emoji mapping for different log types
+EMOJI_MAP = {
+    # Log levels
+    "debug": "🔍",
+    "info": "ℹ️",
+    "warning": "⚠️",
+    "error": "❌",
+    "critical": "🚨",
+    
+    # Categories
+    "start": "🚀",
+    "complete": "✅",
+    "progress": "🔄",
+    "gpt": "🤖",
+    "data": "📊",
+    "update": "📝",
+    "network": "🌐",
+    "time": "⏱️",
+    "config": "⚙️",
+    "skip": "⏭️",
+    "stop": "🛑",
+    "success": "🎉",
+}
 
 # Common device info used across all entities
 DEVICE_INFO = {
@@ -260,31 +294,77 @@ async def setup_mqtt_service_status(script_id: str, sensor_id: str, sensor_name:
         logger.error(f"Failed to setup MQTT service status '{sensor_name}': {str(e)}")
         return False
 
-async def log(script_id: str, sensor_id: str, message: str, reset: bool = False) -> bool:
+async def log(
+    script_id: str, 
+    sensor_id: str, 
+    message: str, 
+    reset: bool = False, 
+    level: int = INFO,
+    category: Optional[str] = None,
+    log_to_ha: bool = True
+) -> bool:
     """
-    Log messages to a Home Assistant MQTT sensor by appending to an attribute field.
+    Enhanced log function that handles both console and Home Assistant logging.
     
     Args:
         script_id: Unique identifier for the script
         sensor_id: Unique identifier for the sensor to log to
         message: Message text to log
         reset: If True, clear the existing log buffer before adding this message
+        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        category: Optional category for emoji selection
+        log_to_ha: Whether to log to Home Assistant (set to False for debug messages)
         
     Returns:
         True if logging was successful, False otherwise
     """
-    print(message)
-    logger.info(f"[{script_id}] {message}")
-
+    # Determine emoji based on level and category
+    emoji = ""
+    if category and category in EMOJI_MAP:
+        emoji = EMOJI_MAP[category]
+    elif level == DEBUG:
+        emoji = EMOJI_MAP["debug"]
+    elif level == INFO:
+        emoji = EMOJI_MAP["info"]
+    elif level == WARNING:
+        emoji = EMOJI_MAP["warning"]
+    elif level == ERROR:
+        emoji = EMOJI_MAP["error"]
+    elif level == CRITICAL:
+        emoji = EMOJI_MAP["critical"]
+    
+    # Format message with emoji
+    formatted_message = f"{emoji} {message}" if emoji else message
+    
+    # Log to console with appropriate level
+    if level == DEBUG:
+        logger.debug(f"[{script_id}] {formatted_message}")
+    elif level == INFO:
+        logger.info(f"[{script_id}] {formatted_message}")
+    elif level == WARNING:
+        logger.warning(f"[{script_id}] {formatted_message}")
+    elif level == ERROR:
+        logger.error(f"[{script_id}] {formatted_message}")
+    elif level == CRITICAL:
+        logger.critical(f"[{script_id}] {formatted_message}")
+    
+    # Always print to console for visibility
+    print(formatted_message)
+    
+    # Only log to Home Assistant if requested and level is appropriate
+    # (DEBUG messages are typically not logged to HA)
+    if not log_to_ha or level < INFO:
+        return True
+    
+    # Check if sensor is initialized
     if (script_id, sensor_id) not in log_buffers:
-        # Sensor not initialized, no need to publish MQTT log.
         logger.warning(f"Attempted to log to uninitialized sensor: {script_id}_{sensor_id}")
         return False
     
     if reset:
         log_buffers[(script_id, sensor_id)] = ""
 
-    log_buffers[(script_id, sensor_id)] += message + "\n"
+    log_buffers[(script_id, sensor_id)] += formatted_message + "\n"
 
     state_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{script_id}_{sensor_id}/state"
     attributes_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{script_id}_{sensor_id}/attributes"
@@ -303,3 +383,37 @@ async def log(script_id: str, sensor_id: str, message: str, reset: bool = False)
     except Exception as e:
         logger.error(f"Failed to publish log message to MQTT: {str(e)}")
         return False
+
+# Convenience functions for different log levels
+async def debug(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    """Log a debug message (not sent to Home Assistant)."""
+    return await log(script_id, sensor_id or "status", message, level=DEBUG, category=category, log_to_ha=False)
+
+async def info(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    """Log an info message."""
+    return await log(script_id, sensor_id or "status", message, level=INFO, category=category, log_to_ha=False)
+
+async def warning(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    """Log a warning message (sent to Home Assistant)."""
+    return await log(script_id, sensor_id or "status", message, level=WARNING, category=category)
+
+async def error(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    """Log an error message (sent to Home Assistant)."""
+    return await log(script_id, sensor_id or "status", message, level=ERROR, category=category)
+
+async def critical(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    """Log a critical message (sent to Home Assistant)."""
+    return await log(script_id, sensor_id or "status", message, level=CRITICAL, category=category)
+
+# Special purpose logging functions
+async def gpt_decision(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    """Log a GPT decision (always sent to Home Assistant)."""
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="gpt", log_to_ha=True)
+
+async def progress(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    """Log a progress update."""
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="progress", log_to_ha=False)
+
+async def success(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    """Log a success message (sent to Home Assistant)."""
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=True)

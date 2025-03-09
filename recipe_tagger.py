@@ -21,7 +21,7 @@ import logging
 from typing import Dict, List, Tuple, Optional, Set, Any
 from dotenv import load_dotenv
 
-from utils.ha_mqtt import log
+import utils.ha_mqtt as ha_mqtt
 import utils.mealie_api as mealie_api
 import utils.gpt_utils as gpt_utils
 
@@ -98,7 +98,7 @@ async def classify_recipe_with_gpt(
     clean_ingredients = [i.strip() for i in ingredients if i and i.strip()]
     if not clean_ingredients:
         logger.warning(f"Recipe '{name}' has no valid ingredients, skipping classification")
-        await log(SCRIPT_CONFIG["id"], "status", f"⚠️ Recipe '{name}' has no valid ingredients, skipping classification.")
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], f"Recipe '{name}' has no valid ingredients, skipping classification.")
         return [], None
 
     # Construct prompt for GPT
@@ -133,14 +133,14 @@ async def classify_recipe_with_gpt(
 
     if invalid_tags:
         logger.warning(f"GPT returned invalid tags for '{name}': {invalid_tags}")
-        await log(SCRIPT_CONFIG["id"], "status", f"⚠️ GPT returned invalid tags {invalid_tags}. Ignoring these.")
-        await log(SCRIPT_CONFIG["id"], "feedback", f"⚠️ GPT returned invalid tags {invalid_tags}. Ignoring these.")
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], f"GPT returned invalid tags {invalid_tags}. Ignoring these.")
+        await ha_mqtt.log(SCRIPT_CONFIG["id"], "feedback", f"GPT returned invalid tags {invalid_tags}. Ignoring these.")
 
     # Validate category
     if category and category not in VALID_CATEGORIES:
         logger.warning(f"GPT returned invalid category for '{name}': {category}")
-        await log(SCRIPT_CONFIG["id"], "status", f"⚠️ Invalid category '{category}' received from GPT. Ignoring.")
-        await log(SCRIPT_CONFIG["id"], "feedback", f"⚠️ Invalid category '{category}' received from GPT. Ignoring.")
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], f"Invalid category '{category}' received from GPT. Ignoring.")
+        await ha_mqtt.log(SCRIPT_CONFIG["id"], "feedback", f"Invalid category '{category}' received from GPT. Ignoring.")
         category = None
 
     logger.info(f"Classification for '{name}': Tags={filtered_tags}, Category={category}")
@@ -215,30 +215,30 @@ async def update_recipe(
                 logger.warning(f"Failed to create category: {new_category}")
 
     # Log update details
-    await log(
+    await ha_mqtt.info(
         SCRIPT_CONFIG["id"],
-        "status",
-        f"📝 Updating '{recipe_slug}' with tags: {', '.join(new_tags)} | Category: {new_category}"
+        f"Updating '{recipe_slug}' with tags: {', '.join(new_tags)} | Category: {new_category}",
+        category="update"
     )
 
     # Handle dry run mode
     if DRY_RUN:
         logger.info(f"[DRY-RUN] Would update {recipe_slug} with tags: {new_tags}, category: {new_category}")
-        await log(SCRIPT_CONFIG["id"], "status",
-                  f"🔹 [DRY-RUN] Would update {recipe_slug} with PATCH")
+        await ha_mqtt.info(SCRIPT_CONFIG["id"],
+                  f"[DRY-RUN] Would update {recipe_slug} with PATCH", category="skip")
         return True
 
     # Perform the update
     ok = await mealie_api.update_recipe_tags_categories(recipe_slug, payload)
     if ok:
         logger.info(f"Successfully updated {recipe_slug}")
-        await log(SCRIPT_CONFIG["id"], "status",
-                  f"✅ Successfully updated {recipe_slug} with tags: {', '.join(new_tags)} | Category: {new_category}")
+        await ha_mqtt.success(SCRIPT_CONFIG["id"],
+                  f"Successfully updated {recipe_slug} with tags: {', '.join(new_tags)} | Category: {new_category}")
         return True
     else:
         logger.error(f"Failed to update {recipe_slug}")
-        await log(SCRIPT_CONFIG["id"], "status",
-                  f"❌ Error updating {recipe_slug}")
+        await ha_mqtt.error(SCRIPT_CONFIG["id"],
+                  f"Error updating {recipe_slug}")
         return False
 
 def extract_ingredients(recipe_details: Dict[str, Any]) -> List[str]:
@@ -281,19 +281,19 @@ async def main() -> None:
         }
         
         # 1. Fetch all recipes
-        await log(SCRIPT_CONFIG["id"], "status", "🚀 Fetching recipes from Mealie...")
+        await ha_mqtt.info(SCRIPT_CONFIG["id"], "Fetching recipes from Mealie...", category="start")
         recipes = await mealie_api.get_all_recipes()
         if not recipes:
             logger.warning("No recipes found in Mealie")
-            await log(SCRIPT_CONFIG["id"], "status", "❌ No recipes found.")
+            await ha_mqtt.warning(SCRIPT_CONFIG["id"], "No recipes found.")
             return
 
         stats["total_recipes"] = len(recipes)
-        await log(SCRIPT_CONFIG["id"], "status", f"✅ Fetched {len(recipes)} recipes.")
+        await ha_mqtt.success(SCRIPT_CONFIG["id"], f"Fetched {len(recipes)} recipes.")
         logger.info(f"Fetched {len(recipes)} recipes from Mealie")
 
         # 2. Preload tags and categories
-        await log(SCRIPT_CONFIG["id"], "status", "📥 Preloading Mealie tags & categories...")
+        await ha_mqtt.info(SCRIPT_CONFIG["id"], "Preloading Mealie tags & categories...", category="data")
         all_tags = await mealie_api.get_tags()
         all_categories = await mealie_api.get_categories()
 
@@ -320,10 +320,9 @@ async def main() -> None:
                 ingredients = extract_ingredients(details)
                 if not ingredients:
                     logger.warning(f"Recipe '{recipe['name']}' has no valid ingredients")
-                    await log(
+                    await ha_mqtt.warning(
                         SCRIPT_CONFIG["id"],
-                        "status",
-                        f"⚠️ Recipe '{recipe['name']}' has no valid ingredients. Skipping classification."
+                        f"Recipe '{recipe['name']}' has no valid ingredients. Skipping classification."
                     )
                     stats["skipped"] += 1
                     continue
@@ -347,28 +346,28 @@ async def main() -> None:
                 # Update progress
                 if index % 5 == 0 or index == len(recipes) - 1:
                     progress = f"Progress: {index+1}/{len(recipes)} recipes processed"
-                    await log(SCRIPT_CONFIG["id"], "status", progress)
+                    await ha_mqtt.progress(SCRIPT_CONFIG["id"], progress)
                 
             except Exception as e:
                 logger.error(f"Error processing recipe {recipe.get('slug', 'unknown')}: {str(e)}", exc_info=True)
-                await log(SCRIPT_CONFIG["id"], "status", f"❌ Error processing recipe: {str(e)}")
+                await ha_mqtt.error(SCRIPT_CONFIG["id"], f"Error processing recipe: {str(e)}")
                 stats["errors"] += 1
 
         # 4. Log completion
         summary = (
-            f"🎉 Processing complete! "
+            f"Processing complete! "
             f"Processed {stats['processed']}/{stats['total_recipes']} recipes, "
             f"Updated {stats['updated']}, "
             f"Skipped {stats['skipped']}, "
             f"Errors {stats['errors']}"
         )
-        await log(SCRIPT_CONFIG["id"], "status", summary)
+        await ha_mqtt.success(SCRIPT_CONFIG["id"], summary)
         logger.info(summary)
         
     except Exception as e:
         error_msg = f"Error in recipe tagger: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        await log(SCRIPT_CONFIG["id"], "status", f"❌ {error_msg}")
+        await ha_mqtt.error(SCRIPT_CONFIG["id"], error_msg)
 
 # Assign main function to execute_function
 SCRIPT_CONFIG["execute_function"] = main

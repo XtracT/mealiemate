@@ -26,7 +26,7 @@ from typing import Dict, List, Any, Optional, Set
 import asyncio
 from dotenv import load_dotenv
 
-from utils.ha_mqtt import log
+import utils.ha_mqtt as ha_mqtt
 import utils.mealie_api as mealie_api
 import utils.gpt_utils as gpt_utils
 
@@ -79,7 +79,7 @@ async def get_recipe_ingredients(recipe_id: str) -> List[Dict[str, Any]]:
     recipe_details = await mealie_api.get_recipe_details(recipe_id)
     if not recipe_details:
         logger.warning(f"Could not fetch recipe {recipe_id}")
-        await log(SCRIPT_CONFIG["id"], "status", f"❌ Could not fetch recipe {recipe_id}")
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], f"Could not fetch recipe {recipe_id}")
         return []
 
     # Extract and normalize ingredient data
@@ -124,7 +124,7 @@ async def consolidate_ingredients(meal_plan: List[Dict[str, Any]]) -> List[Dict[
             recipe_count += 1
     
     logger.info(f"Collected {len(ingredient_list)} ingredients from {recipe_count} recipes")
-    await log(SCRIPT_CONFIG["id"], "status", f"✅ Collected {len(ingredient_list)} total ingredients from {recipe_count} recipes.")
+    await ha_mqtt.success(SCRIPT_CONFIG["id"], f"Collected {len(ingredient_list)} total ingredients from {recipe_count} recipes.")
     return ingredient_list
 
 async def clean_up_shopping_list(ingredients: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -142,7 +142,7 @@ async def clean_up_shopping_list(ingredients: List[Dict[str, Any]]) -> List[Dict
     Returns:
         Cleaned and organized shopping list
     """
-    await log(SCRIPT_CONFIG["id"], "status", "🧠 Using GPT to clean up the shopping list...")
+    await ha_mqtt.gpt_decision(SCRIPT_CONFIG["id"], "Using GPT to clean up the shopping list...")
     logger.info(f"Cleaning up shopping list with {len(ingredients)} ingredients")
 
     # Sort ingredients for more consistent GPT processing
@@ -201,24 +201,24 @@ async def clean_up_shopping_list(ingredients: List[Dict[str, Any]]) -> List[Dict
     feedback = result.get("feedback", [])
 
     # Log results
-    await log(SCRIPT_CONFIG["id"], "status", f"✅ Shopping list consolidated from {len(ingredients)} to {len(cleaned_list)} items.")
+    await ha_mqtt.success(SCRIPT_CONFIG["id"], f"Shopping list consolidated from {len(ingredients)} to {len(cleaned_list)} items.")
     logger.info(f"Shopping list consolidated from {len(ingredients)} to {len(cleaned_list)} items")
     
     # Log item merging details
-    await log(SCRIPT_CONFIG["id"], "status", "\n🔄 **Item Merging Details:**")
+    await ha_mqtt.info(SCRIPT_CONFIG["id"], "\nItem Merging Details:", category="data")
     for item in cleaned_list:
         merged_str = ", ".join(item.get("merged_items", []))
-        item_desc = f"📌 {item['quantity']} {item['unit']} {item['name']} ({item['category']})"
+        item_desc = f"{item['quantity']} {item['unit']} {item['name']} ({item['category']})"
         if merged_str:
             item_desc += f"  <-  {merged_str}"
-        await log(SCRIPT_CONFIG["id"], "status", item_desc)
+        await ha_mqtt.info(SCRIPT_CONFIG["id"], item_desc, category="data")
 
     # Log any feedback from GPT
     if feedback:
-        await log(SCRIPT_CONFIG["id"], "status", "\n⚠️ **GPT Feedback:**")
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], "\nGPT Feedback:")
         for issue in feedback:
-            await log(SCRIPT_CONFIG["id"], "status", f"🔹 {issue}")
-            await log(SCRIPT_CONFIG["id"], "feedback", f"🔹 {issue}")
+            await ha_mqtt.warning(SCRIPT_CONFIG["id"], issue)
+            await ha_mqtt.log(SCRIPT_CONFIG["id"], "feedback", issue)
             logger.info(f"GPT Feedback: {issue}")
 
     return cleaned_list
@@ -241,7 +241,7 @@ async def create_mealie_shopping_list(
     shopping_list_id = await mealie_api.create_shopping_list(list_name)
     if not shopping_list_id:
         logger.error(f"Failed to create shopping list: {list_name}")
-        await log(SCRIPT_CONFIG["id"], "status", f"❌ Failed to create shopping list: {list_name}")
+        await ha_mqtt.error(SCRIPT_CONFIG["id"], f"Failed to create shopping list: {list_name}")
         return False
         
     logger.info(f"Created shopping list: {list_name} (ID: {shopping_list_id})")
@@ -249,10 +249,10 @@ async def create_mealie_shopping_list(
     # Add items to the shopping list
     if not cleaned_list:
         logger.warning("No items to add to shopping list")
-        await log(SCRIPT_CONFIG["id"], "status", "⚠️ No items to add to shopping list")
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], "No items to add to shopping list")
         return True
         
-    await log(SCRIPT_CONFIG["id"], "status", "\n📤 Adding items to Mealie shopping list...")
+    await ha_mqtt.info(SCRIPT_CONFIG["id"], "Adding items to Mealie shopping list...", category="update")
     
     success_count = 0
     error_count = 0
@@ -268,7 +268,7 @@ async def create_mealie_shopping_list(
         else:
             error_count += 1
             logger.error(f"Failed to add item to shopping list: {formatted_note}")
-            await log(SCRIPT_CONFIG["id"], "status", f"❌ Failed to add {formatted_note}")
+            await ha_mqtt.error(SCRIPT_CONFIG["id"], f"Failed to add {formatted_note}")
     
     # Log summary
     summary = f"Added {success_count} items to shopping list"
@@ -294,7 +294,7 @@ async def main() -> None:
         num_days = SCRIPT_CONFIG["numbers"]["list_length"]["value"]
         list_name = f"Mealplan {datetime.today().strftime('%d %b')}"
         
-        await log(SCRIPT_CONFIG["id"], "status", f"\n➡️ Working on your new shopping list: {list_name}")
+        await ha_mqtt.info(SCRIPT_CONFIG["id"], f"Working on your new shopping list: {list_name}", category="start")
         logger.info(f"Generating shopping list: {list_name} for {num_days} days")
 
         # Define date range for meal plan
@@ -305,7 +305,7 @@ async def main() -> None:
         meal_plan = await mealie_api.get_meal_plan(start_date, end_date)
         if not meal_plan:
             logger.warning("No meal plan data available")
-            await log(SCRIPT_CONFIG["id"], "status", "❌ No meal plan data available.")
+            await ha_mqtt.warning(SCRIPT_CONFIG["id"], "No meal plan data available.")
             return
 
         # Extract meal plan entries with recipes
@@ -316,17 +316,17 @@ async def main() -> None:
         
         if not meal_plan_entries:
             logger.warning("No recipes found in meal plan")
-            await log(SCRIPT_CONFIG["id"], "status", "❌ No recipes found in meal plan.")
+            await ha_mqtt.warning(SCRIPT_CONFIG["id"], "No recipes found in meal plan.")
             return
             
-        await log(SCRIPT_CONFIG["id"], "status", f"✅ Found {len(meal_plan_entries)} meal plan entries.")
+        await ha_mqtt.info(SCRIPT_CONFIG["id"], f"Found {len(meal_plan_entries)} meal plan entries.", category="data")
         logger.info(f"Found {len(meal_plan_entries)} meal plan entries")
 
         # Process ingredients
         raw_ingredients = await consolidate_ingredients(meal_plan_entries)
         if not raw_ingredients:
             logger.warning("No ingredients found in recipes")
-            await log(SCRIPT_CONFIG["id"], "status", "❌ No ingredients found in recipes.")
+            await ha_mqtt.warning(SCRIPT_CONFIG["id"], "No ingredients found in recipes.")
             return
             
         # Clean up shopping list
@@ -335,19 +335,19 @@ async def main() -> None:
         # Handle dry run mode
         if DRY_RUN:
             logger.info(f"[DRY-RUN] Would create shopping list: {list_name} with {len(cleaned_list)} items")
-            await log(SCRIPT_CONFIG["id"], "status", f"📝 [DRY-RUN] Would create shopping list: {list_name} with {len(cleaned_list)} items")
+            await ha_mqtt.info(SCRIPT_CONFIG["id"], f"[DRY-RUN] Would create shopping list: {list_name} with {len(cleaned_list)} items", category="skip")
             return
 
         # Create shopping list in Mealie
         success = await create_mealie_shopping_list(list_name, cleaned_list)
         if success:
-            await log(SCRIPT_CONFIG["id"], "status", "\n✅ Done! Your Mealie shopping list is updated.")
+            await ha_mqtt.success(SCRIPT_CONFIG["id"], "Done! Your Mealie shopping list is updated.")
             logger.info("Shopping list created successfully")
         
     except Exception as e:
         error_msg = f"Error generating shopping list: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        await log(SCRIPT_CONFIG["id"], "status", f"❌ {error_msg}")
+        await ha_mqtt.error(SCRIPT_CONFIG["id"], error_msg)
 
 # Assign main function to execute_function
 SCRIPT_CONFIG["execute_function"] = main

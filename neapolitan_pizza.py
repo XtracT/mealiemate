@@ -23,6 +23,8 @@ import math
 import logging
 from typing import Dict, Tuple, Optional, List
 
+import utils.ha_mqtt as ha_mqtt
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -245,6 +247,7 @@ async def main() -> None:
     
     try:
         # 1) Read user inputs
+        await ha_mqtt.info(SCRIPT_CONFIG["id"], "Starting pizza dough calculation...", category="start")
         num_balls = SCRIPT_CONFIG["numbers"]["number_of_balls"]["value"]
         ball_weight = SCRIPT_CONFIG["numbers"]["ball_weight"]["value"]
         hydration_percent = SCRIPT_CONFIG["numbers"]["hydration"]["value"]
@@ -254,6 +257,11 @@ async def main() -> None:
         total_time = SCRIPT_CONFIG["numbers"]["total_time"]["value"]
         
         logger.info(f"Calculating recipe for {num_balls} balls, {ball_weight}g each, {hydration_percent}% hydration")
+        await ha_mqtt.info(
+            SCRIPT_CONFIG["id"], 
+            f"Calculating recipe for {num_balls} balls, {ball_weight}g each, {hydration_percent}% hydration", 
+            category="data"
+        )
         
         # 2) Calculate base ingredients
         ingredients = calculate_dough_ingredients(
@@ -281,19 +289,23 @@ async def main() -> None:
         yeast_grams = ingredients["flour"] * (yeast_percent / 100.0)
         
         logger.info(f"Calculated {yeast_grams:.2f}g yeast for {eq_hours:.2f} equivalent hours")
+        await ha_mqtt.info(
+            SCRIPT_CONFIG["id"], 
+            f"Calculated {yeast_grams:.2f}g yeast for {eq_hours:.2f} equivalent hours", 
+            category="data"
+        )
         
         # 5) Format recipe output
         markdown_text = format_recipe_output(ingredients, schedule, yeast_grams)
         
         # 6) Log via MQTT
-        from utils.ha_mqtt import log
-        await log(SCRIPT_CONFIG["id"], "dough_recipe", markdown_text, reset=True)
+        await ha_mqtt.log(SCRIPT_CONFIG["id"], "dough_recipe", markdown_text, reset=True)
+        await ha_mqtt.success(SCRIPT_CONFIG["id"], "Pizza dough recipe calculated successfully")
         logger.info("Pizza dough recipe published successfully")
         
     except Exception as e:
         logger.error(f"Error calculating pizza dough recipe: {str(e)}", exc_info=True)
-        from utils.ha_mqtt import log
-        await log(SCRIPT_CONFIG["id"], "dough_recipe", f"Error calculating recipe: {str(e)}", reset=True)
+        await ha_mqtt.error(SCRIPT_CONFIG["id"], f"Error calculating recipe: {str(e)}")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -77,7 +77,7 @@ async def setup_mqtt_entities() -> None:
     This registers all switches, sensors, numbers, and text inputs for each script,
     plus a service status indicator for the overall application.
     """
-    logger.info("Setting up MQTT entities for Home Assistant discovery")
+    await ha_mqtt.info("mealiemate", "Setting up MQTT entities for Home Assistant discovery", category="config")
     
     for script_id, script in SCRIPT_MAP.items():
         # Set up switch for enabling/disabling the script
@@ -112,7 +112,7 @@ async def setup_mqtt_entities() -> None:
 
     # Set up overall service status indicator
     await ha_mqtt.setup_mqtt_service_status("mealiemate", "status", "MealieMate Status")
-    logger.info("MQTT entity setup complete")
+    await ha_mqtt.success("mealiemate", "MQTT entity setup complete")
 
 async def update_switch_state(script_id: str, state: str) -> None:
     """
@@ -126,7 +126,7 @@ async def update_switch_state(script_id: str, state: str) -> None:
         async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
             topic = f"{MQTT_DISCOVERY_PREFIX}/switch/{script_id}/state"
             await client.publish(topic, payload=state, retain=True)
-            logger.debug(f"Updated switch state for {script_id} to {state}")
+            await ha_mqtt.debug(script_id, f"Updated switch state to {state}")
     except Exception as e:
         logger.error(f"Failed to update switch state for {script_id}: {str(e)}")
 
@@ -138,7 +138,7 @@ async def execute_script(script_id: str, script_func: Callable) -> None:
         script_id: ID of the script to execute
         script_func: Function to execute (not used, script is executed from SCRIPT_MAP)
     """
-    logger.info(f"Starting script: {script_id}")
+    await ha_mqtt.info(script_id, "Starting script", category="start")
     await update_switch_state(script_id, "ON")
 
     # Create task for the script
@@ -148,25 +148,24 @@ async def execute_script(script_id: str, script_func: Callable) -> None:
     try:
         # Wait for the script to complete
         await task
-        logger.info(f"Script completed successfully: {script_id}")
-        print(f"✅ Completed successfully: {script_id}")
+        await ha_mqtt.success(script_id, "Script completed successfully")
     except asyncio.CancelledError:
-        logger.info(f"Script stopped manually: {script_id}")
-        print(f"🛑 Stopped manually: {script_id}")
+        await ha_mqtt.info(script_id, "Script stopped manually", category="stop")
     except Exception as e:
         # Log detailed error information
         logger.error(f"Error in script {script_id}: {str(e)}", exc_info=True)
         
         # Print a detailed traceback to the console
         traceback.print_exc()
-        print(f"⚠️ Error in {script_id}: {str(e)}")
-
-        # Also print just the file name + line number for quick reference
+        
+        # Get file name and line number for quick reference
         exc_type, exc_value, exc_tb = sys.exc_info()
         if exc_tb:
             file_name = exc_tb.tb_frame.f_code.co_filename
             line_no = exc_tb.tb_lineno
-            print(f"⚠️ Error in {script_id} at {file_name}:{line_no} → {e}")
+            await ha_mqtt.error(script_id, f"Error at {file_name}:{line_no} → {e}")
+        else:
+            await ha_mqtt.error(script_id, f"Error: {str(e)}")
     finally:
         # Clean up
         running_tasks.pop(script_id, None)
@@ -188,19 +187,19 @@ async def mqtt_listener() -> None:
         async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT, will=will_msg, timeout=5) as client:
             # Publish initial online status
             await client.publish(state_topic, payload="ON", retain=True)
-            logger.info("MQTT listener started, service status set to ON")
+            await ha_mqtt.info("mealiemate", "MQTT listener started, service status set to ON", category="network")
 
             # Subscribe to control topics
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/switch/+/set")
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/number/+/set")
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/text/+/set")
-            logger.info("Subscribed to MQTT control topics")
+            await ha_mqtt.info("mealiemate", "Subscribed to MQTT control topics", category="network")
 
             # Process incoming messages
             async for message in client.messages:
                 topic = str(message.topic)
                 payload = message.payload.decode()
-                logger.debug(f"Received MQTT message: {topic} = {payload}")
+                await ha_mqtt.debug("mealiemate", f"Received MQTT message: {topic} = {payload}", category="network")
                 await mqtt_message_queue.put((topic, payload))
     except Exception as e:
         logger.error(f"MQTT listener error: {str(e)}")
@@ -235,8 +234,7 @@ async def process_message(topic: str, payload: str) -> None:
 
     # Validate script ID
     if not script_id or script_id not in SCRIPT_MAP:
-        logger.warning(f"Unknown script ID in MQTT message: {raw_id}")
-        print(f"⚠️ Unknown script: {script_id}")
+        await ha_mqtt.warning("mealiemate", f"Unknown script ID in MQTT message: {raw_id}")
         return
     
     # Handle number updates
@@ -244,11 +242,9 @@ async def process_message(topic: str, payload: str) -> None:
         try:
             value = int(payload)
             SCRIPT_MAP[script_id]["numbers"][entity_id]["value"] = value
-            logger.info(f"Updated {script_id} number {entity_id} to {value}")
-            print(f"📊 Updated {script_id} number {entity_id}: {value}")
+            await ha_mqtt.info(script_id, f"Updated number {entity_id} to {value}", category="data")
         except ValueError:
-            logger.error(f"Invalid number value received: {payload}")
-            print(f"⚠️ Invalid number received: {payload}")
+            await ha_mqtt.error(script_id, f"Invalid number value received: {payload}")
         except KeyError:
             logger.error(f"Unknown number entity: {entity_id} for script {script_id}")
         return
@@ -258,11 +254,9 @@ async def process_message(topic: str, payload: str) -> None:
         try:
             text = str(payload)
             SCRIPT_MAP[script_id]["texts"][entity_id]["text"] = text
-            logger.info(f"Updated {script_id} text {entity_id} to: {text[:30]}...")
-            print(f"📊 Updated {script_id} text {entity_id}: {text[:30]}...")
+            await ha_mqtt.info(script_id, f"Updated text {entity_id} to: {text[:30]}...", category="data")
         except ValueError:
-            logger.error(f"Invalid string value received: {payload}")
-            print(f"⚠️ Invalid string received: {payload}")
+            await ha_mqtt.error(script_id, f"Invalid string value received: {payload}")
         except KeyError:
             logger.error(f"Unknown text entity: {entity_id} for script {script_id}")
         return
@@ -270,27 +264,24 @@ async def process_message(topic: str, payload: str) -> None:
     # Handle switch commands (ON/OFF)
     if payload == "ON":
         if script_id in running_tasks:
-            logger.info(f"Script {script_id} is already running")
-            print(f"⏭️ {script_id}: Already running")
+            await ha_mqtt.info(script_id, "Script is already running", category="skip")
             return
-        logger.info(f"Starting script {script_id}")
+        await ha_mqtt.info(script_id, "Starting script", category="start")
         asyncio.create_task(execute_script(script_id, SCRIPT_MAP[script_id]))
     elif payload == "OFF":
         if script_id not in running_tasks:
-            logger.info(f"Script {script_id} is not running")
-            print(f"⏭️ {script_id}: Not running")
+            await ha_mqtt.info(script_id, "Script is not running", category="skip")
             return
-        logger.info(f"Stopping script {script_id}")
-        print(f"🔚 Stopping: {script_id}")
+        await ha_mqtt.info(script_id, "Stopping script", category="stop")
         task = running_tasks.pop(script_id)
         task.cancel()
         try:
             await asyncio.wait_for(task, timeout=1)
         except (asyncio.CancelledError, asyncio.TimeoutError):
-            logger.info(f"Script {script_id} cancelled or timed out during shutdown")
+            await ha_mqtt.info(script_id, "Script cancelled or timed out during shutdown", category="stop")
             pass
     else:
-        logger.warning(f"Unknown switch command: {payload}")
+        await ha_mqtt.warning(script_id, f"Unknown switch command: {payload}")
 
 async def mqtt_message_processor() -> None:
     """
@@ -299,7 +290,7 @@ async def mqtt_message_processor() -> None:
     This function runs in a loop, taking messages from the queue and
     processing them, with error handling and backoff.
     """
-    logger.info("MQTT message processor started")
+    await ha_mqtt.info("mealiemate", "MQTT message processor started", category="start")
     
     while True:
         try:
@@ -313,7 +304,7 @@ async def mqtt_message_processor() -> None:
         except Exception as e:
             # Log any processing errors and continue after a short delay
             logger.error(f"Error processing MQTT message: {str(e)}", exc_info=True)
-            print(f"⚠️ Processing error: {str(e)}")
+            await ha_mqtt.error("mealiemate", f"Processing error: {str(e)}")
             await asyncio.sleep(1)
 
 async def main() -> None:
@@ -327,8 +318,7 @@ async def main() -> None:
     4. Waits for shutdown signal
     5. Performs graceful shutdown
     """
-    print("🌟 MealieMate - Service Started")
-    logger.info("MealieMate service starting")
+    await ha_mqtt.info("mealiemate", "MealieMate service starting", category="start")
 
     # Set up graceful shutdown
     shutdown_event = asyncio.Event()
@@ -336,7 +326,8 @@ async def main() -> None:
 
     def _signal_handler():
         logger.info("Received shutdown signal")
-        print("🔔 Received shutdown signal")
+        # Use asyncio.create_task to run the async function in the signal handler
+        asyncio.create_task(ha_mqtt.info("mealiemate", "Received shutdown signal"))
         shutdown_event.set()
 
     # Register signal handlers
@@ -351,7 +342,7 @@ async def main() -> None:
         listener_task = asyncio.create_task(mqtt_listener())
         processor_task = asyncio.create_task(mqtt_message_processor())
         
-        logger.info("MealieMate service started successfully")
+        await ha_mqtt.success("mealiemate", "MealieMate service started successfully")
 
         # Wait for shutdown signal
         while not shutdown_event.is_set():
@@ -362,12 +353,11 @@ async def main() -> None:
                 pass
 
         # Begin graceful shutdown
-        logger.info("Starting graceful shutdown")
-        print("🔦 Shutting down gracefully...")
+        await ha_mqtt.info("mealiemate", "Starting graceful shutdown", category="stop")
         
         # Cancel any running scripts
         for script_id, task in list(running_tasks.items()):
-            logger.info(f"Cancelling running script: {script_id}")
+            await ha_mqtt.info(script_id, "Cancelling running script", category="stop")
             task.cancel()
         
         if running_tasks:
@@ -379,7 +369,7 @@ async def main() -> None:
             async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
                 state_topic = f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/mealiemate_status/state"
                 await client.publish(state_topic, payload="OFF", retain=True)
-                logger.info("Published offline status to MQTT")
+                await ha_mqtt.info("mealiemate", "Published offline status to MQTT", category="network")
         except Exception as e:
             logger.error(f"Error publishing offline status: {str(e)}")
 
@@ -389,12 +379,11 @@ async def main() -> None:
         
         await asyncio.gather(listener_task, processor_task, return_exceptions=True)
         
-        logger.info("MealieMate service shutdown complete")
-        print("👋 Bye!")
+        await ha_mqtt.success("mealiemate", "MealieMate service shutdown complete")
         
     except Exception as e:
         logger.critical(f"Fatal error in main: {str(e)}", exc_info=True)
-        print(f"💥 Fatal error: {str(e)}")
+        await ha_mqtt.critical("mealiemate", f"Fatal error: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":

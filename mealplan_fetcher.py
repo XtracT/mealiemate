@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
 from telegram import Bot
 
-from utils.ha_mqtt import log
+import utils.ha_mqtt as ha_mqtt
 import utils.mealie_api as mealie_api
 
 # Configure logging
@@ -408,9 +408,10 @@ async def main() -> None:
     end_date = (datetime.today() + timedelta(days=num_days - 1)).strftime("%Y-%m-%d")
 
     # Fetch meal plan from Mealie
+    await ha_mqtt.info(SCRIPT_CONFIG["id"], "Fetching meal plan from Mealie...", category="data")
     mealplan_items = await mealie_api.get_meal_plan(start_date, end_date)
     if not mealplan_items:
-        await log(SCRIPT_CONFIG["id"], "status", "❌ No meal plan data available.")
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], "No meal plan data available.")
         return
 
     # Build a dictionary: { "YYYY-MM-DD": { "Lunch": recipe, "Dinner": recipe }, ... }
@@ -425,14 +426,23 @@ async def main() -> None:
 
     # Generate Markdown table and log via MQTT
     mealplan_markdown = generate_markdown_table(mealplan, mealie_url)
-    await log(SCRIPT_CONFIG["id"], "mealplan", mealplan_markdown)
-    await log(SCRIPT_CONFIG["id"], "status", "✅ Meal plan fetched and logged.")
+    await ha_mqtt.log(SCRIPT_CONFIG["id"], "mealplan", mealplan_markdown)
+    await ha_mqtt.success(SCRIPT_CONFIG["id"], "Meal plan fetched and logged.")
 
     # Generate the PNG image (in memory)
+    await ha_mqtt.info(SCRIPT_CONFIG["id"], "Generating meal plan image...", category="progress")
     image_obj = generate_mealplan_png(mealplan)
 
     # Send the image via Telegram
-    await send_telegram_image(BOT_TOKEN, BOT_CHAT_ID, image_obj, "Weekly Meal Plan")
+    if BOT_TOKEN and BOT_CHAT_ID:
+        await ha_mqtt.info(SCRIPT_CONFIG["id"], "Sending meal plan image to Telegram...", category="network")
+        success = await send_telegram_image(BOT_TOKEN, BOT_CHAT_ID, image_obj, "Weekly Meal Plan")
+        if success:
+            await ha_mqtt.success(SCRIPT_CONFIG["id"], "Meal plan image sent to Telegram successfully.")
+        else:
+            await ha_mqtt.error(SCRIPT_CONFIG["id"], "Failed to send meal plan image to Telegram.")
+    else:
+        await ha_mqtt.warning(SCRIPT_CONFIG["id"], "Telegram credentials not provided. Skipping image send.")
 
 
 SCRIPT_CONFIG["execute_function"] = main
