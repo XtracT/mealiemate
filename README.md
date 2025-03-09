@@ -29,10 +29,16 @@ MealieMate is a collection of Python scripts bundled in a service that integrate
 
 The codebase has been enhanced with several improvements:
 
+- **Plugin Architecture**: Modular plugin system that allows for easy extension and maintenance. Each feature is implemented as a plugin with a clear interface.
+- **Dependency Injection**: Service interfaces and a dependency injection container for better testability and loose coupling between components.
 - **Type Hints**: Comprehensive type annotations throughout the codebase for better IDE support and static type checking.
 - **Error Handling**: Robust error handling with specific error messages and appropriate fallbacks.
 - **Logging**: Structured logging system for easier debugging and monitoring.
-- **Code Organization**: Modular design with clear separation of concerns.
+- **Code Organization**: Modular design with clear separation of concerns:
+  - `core/`: Core interfaces and infrastructure
+  - `plugins/`: Feature implementations as plugins
+  - `services/`: Service implementations
+  - `utils/`: Utility functions and helpers
 - **Documentation**: Enhanced docstrings with detailed parameter descriptions and return value information.
 - **Performance**: Optimized code for better performance and resource usage.
 
