@@ -139,7 +139,7 @@ class MealplanFetcherPlugin(Plugin):
         Returns:
             Markdown-formatted table.
         """
-        header = "| Day        | Lunch                      | Dinner                      |"
+        header = "| Day | Lunch | Dinner |"
         separator = "|-----------|---------------------------|----------------------------|"
         rows = []
 
@@ -159,7 +159,7 @@ class MealplanFetcherPlugin(Plugin):
 
             lunch_link = format_meal(meals.get("Lunch"))
             dinner_link = format_meal(meals.get("Dinner"))
-            rows.append(f"| {weekday:<10} | {lunch_link:<25} | {dinner_link:<25} |")
+            rows.append(f"| {weekday} | {lunch_link} | {dinner_link} |")
 
         return "\n".join([header, separator] + rows)
 
