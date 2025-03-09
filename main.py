@@ -307,6 +307,30 @@ async def mqtt_message_processor() -> None:
             await ha_mqtt.error("mealiemate", f"Processing error: {str(e)}")
             await asyncio.sleep(1)
 
+async def send_status_heartbeat() -> None:
+    """
+    Periodically send a status heartbeat to Home Assistant to keep the device shown as available.
+    
+    Home Assistant has a timeout for MQTT devices, and if it doesn't receive updates
+    periodically, it will mark the device as unavailable. This function sends a status
+    update every hour to prevent that from happening.
+    """
+    state_topic = f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/mealiemate_status/state"
+    
+    while True:
+        try:
+            # Send a heartbeat every hour
+            async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+                await client.publish(state_topic, payload="ON", retain=True)
+                logger.debug("Sent status heartbeat to Home Assistant")
+            
+            # Wait for an hour before sending the next heartbeat
+            await asyncio.sleep(3600)  # 3600 seconds = 1 hour
+        except Exception as e:
+            logger.error(f"Error sending status heartbeat: {str(e)}")
+            # If there was an error, wait a bit and try again
+            await asyncio.sleep(60)  # Wait 1 minute before retrying
+
 async def main() -> None:
     """
     Main entry point for the MealieMate service.
@@ -315,8 +339,9 @@ async def main() -> None:
     1. Sets up signal handlers for graceful shutdown
     2. Initializes MQTT entities
     3. Starts the MQTT listener and message processor
-    4. Waits for shutdown signal
-    5. Performs graceful shutdown
+    4. Starts the status heartbeat task
+    5. Waits for shutdown signal
+    6. Performs graceful shutdown
     """
     await ha_mqtt.info("mealiemate", "MealieMate service starting", category="start")
 
@@ -341,6 +366,9 @@ async def main() -> None:
         # Start MQTT listener and message processor
         listener_task = asyncio.create_task(mqtt_listener())
         processor_task = asyncio.create_task(mqtt_message_processor())
+        
+        # Start the status heartbeat task
+        heartbeat_task = asyncio.create_task(send_status_heartbeat())
         
         await ha_mqtt.success("mealiemate", "MealieMate service started successfully")
 
@@ -374,10 +402,10 @@ async def main() -> None:
             logger.error(f"Error publishing offline status: {str(e)}")
 
         # Cancel and wait for background tasks
-        for t in (listener_task, processor_task):
+        for t in (listener_task, processor_task, heartbeat_task):
             t.cancel()
         
-        await asyncio.gather(listener_task, processor_task, return_exceptions=True)
+        await asyncio.gather(listener_task, processor_task, heartbeat_task, return_exceptions=True)
         
         await ha_mqtt.success("mealiemate", "MealieMate service shutdown complete")
         
