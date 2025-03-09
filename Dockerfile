@@ -1,19 +1,73 @@
-FROM python:3.12-alpine
+# Multi-stage build for MealieMate
+# Stage 1: Build dependencies
+FROM python:3.10-slim AS builder
 
+# Set working directory
 WORKDIR /app
 
-#RUN apk add --no-cache gcc musl-dev python3-dev libffi-dev
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Ensure logs are immediately flushed to stdout
-ENV PYTHONUNBUFFERED=1
+# Copy requirements file
+COPY requirements.txt .
 
-# Copy the Python scripts
-COPY . .
+# Build wheels
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
-# Generate requirements.txt from the script
-#RUN pipreqs . --force
+# Stage 2: Runtime image
+FROM python:3.10-slim
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Set working directory
+WORKDIR /app
 
-CMD ["python", "main.py"]
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=UTC
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy wheels from builder stage
+COPY --from=builder /app/wheels /wheels
+
+# Install Python dependencies
+RUN pip install --no-cache-dir /wheels/* && \
+    rm -rf /wheels
+
+# Create non-root user
+RUN groupadd -g 1000 mealiemate && \
+    useradd -u 1000 -g mealiemate -s /bin/bash -m mealiemate
+
+# Copy application code
+COPY --chown=mealiemate:mealiemate . .
+
+# Create data directory with proper permissions
+RUN mkdir -p /data && chown -R mealiemate:mealiemate /data
+VOLUME /data
+
+# Switch to non-root user
+USER mealiemate
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import asyncio, sys; \
+                 from utils.mealie_api import fetch_data; \
+                 sys.exit(0 if asyncio.run(fetch_data('/api/app/about')) else 1)"
+
+# Use tini as init system
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Command to run the application
+CMD ["python", "-m", "main.py"]
+
+# Labels
+LABEL org.opencontainers.image.title="MealieMate" \
+      org.opencontainers.image.description="Meal planning and recipe management integration for Mealie" \
+      org.opencontainers.image.source="https://github.com/yourusername/mealiemate" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="0.2.0"

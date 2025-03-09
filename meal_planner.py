@@ -4,48 +4,66 @@ Module: meal_planner
 --------------------
 Generates structured, balanced meal plans based on existing recipes, user constraints,
 and number of days requested, then updates Mealie accordingly.
+
+This module uses OpenAI's GPT model to intelligently create meal plans that follow
+specific rules (e.g., pizza on Fridays, balanced nutrition) while considering
+user preferences and existing plans.
 """
 
 import os
 import argparse
 import json
+import logging
 import asyncio
 from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional, Tuple
 from dotenv import load_dotenv
 
 from utils.ha_mqtt import log
 import utils.mealie_api as mealie_api
 import utils.gpt_utils as gpt_utils
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Script configuration for Home Assistant integration
 SCRIPT_CONFIG = {
     "id": "meal_planner",
     "name": "Meal Planner",
     "type": "automation",
     "switch": True,
     "sensors": {
-        "status" : {"id": "status", "name": "Planning Progress"},
-        "feedback" : {"id": "feedback", "name": "Planning Feedback"}
+        "status": {"id": "status", "name": "Planning Progress"},
+        "feedback": {"id": "feedback", "name": "Planning Feedback"}
     },
     "numbers": {
-        "mealplan_length" : {"id": "mealplan_length", "name": "Mealplan Days Required", "value":7}
+        "mealplan_length": {"id": "mealplan_length", "name": "Mealplan Days Required", "value": 7}
     },
     "texts": {
-        "mealplan_message" : {"id": "mealplan_message", "name": "Mealplan User Input", "text":"Generate a mealplan please."}
+        "mealplan_message": {"id": "mealplan_message", "name": "Mealplan User Input", "text": "Generate a mealplan please."}
     },
-    "execute_function": None  # Return the coroutine itself, not a Task
+    "execute_function": None  # Will be assigned the main() function
 }
 
+# Load environment variables
 load_dotenv()
 
+# API configuration
 MEALIE_TOKEN = os.environ.get("MEALIE_TOKEN")
 HA_URL = os.environ.get("HA_URL")
 TOKEN = os.environ.get("HA_TOKEN")
 INPUT_TEXT_ENTITY = os.environ.get("ENTITY")
 
+# GPT configuration
 MODEL_NAME = "gpt-4o"
 TEMPERATURE = 0.1
-DRY_RUN = False
+DRY_RUN = False  # Set to True to skip updating Mealie
 
+# GPT system prompt configuration
 DEFAULT_CONFIG = (
     "You are a **meal planner AI** responsible for generating structured, healthy, and balanced meal plans "
     "based on the given meal catalog, user constraints, and existing plans.\n\n"
@@ -95,18 +113,35 @@ DEFAULT_CONFIG = (
     "🚨 **Failure to follow these instructions will result in rejection of the output.**"
 )
 
-parser = argparse.ArgumentParser(description="Process message with config")
-parser.add_argument("--message", "-m", required=False, help="Input message")
-parser.add_argument("--config", "-c", default=DEFAULT_CONFIG, help="Configuration string")
+# Command line argument parser
+parser = argparse.ArgumentParser(description="Generate meal plans with GPT")
+parser.add_argument("--message", "-m", required=False, help="Input message for meal planning")
+parser.add_argument("--config", "-c", default=DEFAULT_CONFIG, help="Configuration string for GPT")
 args = parser.parse_args()
 
 
-async def async_generate_plan_and_feedback(recipes, mealplan, days, user_message):
+async def async_generate_plan_and_feedback(
+    recipes: List[Dict[str, Any]], 
+    mealplan: List[Dict[str, Any]], 
+    days: List[str], 
+    user_message: str
+) -> Tuple[Dict[str, Dict[str, str]], str]:
     """
     Calls GPT to generate meal plan JSON plus a feedback string.
+    
+    Args:
+        recipes: List of recipe dictionaries with id, name, tags, etc.
+        mealplan: Current meal plan entries
+        days: List of days (YYYY-MM-DD format) to generate meals for
+        user_message: User input message with preferences/constraints
+        
+    Returns:
+        Tuple of (meal_plan_dict, feedback_string)
     """
     await log(SCRIPT_CONFIG["id"], "status", "Asking ChatGPT to Generate Mealplan...")
+    logger.info(f"Generating meal plan for {len(days)} days with user message: {user_message[:50]}...")
 
+    # Prepare data for GPT
     system_prompt_data = {
         "days": days,
         "recipesCatalog": recipes,
@@ -119,10 +154,20 @@ async def async_generate_plan_and_feedback(recipes, mealplan, days, user_message
         {"role": "user", "content": user_message}
     ]
 
+    # Call GPT
     result = await gpt_utils.gpt_json_chat(messages, model=MODEL_NAME, temperature=TEMPERATURE)
+    
+    # Process results
     meal_plan_obj = result.get("mealPlan", {})
     feedback_str = result.get("feedback", "")
+    
+    if not meal_plan_obj:
+        logger.warning("GPT returned empty meal plan")
+        
+    if not feedback_str:
+        logger.warning("GPT returned empty feedback")
 
+    # Format the plan
     plan_days = {
         day: {
             "Lunch": slots.get("Lunch", ""),
@@ -131,56 +176,107 @@ async def async_generate_plan_and_feedback(recipes, mealplan, days, user_message
         for day, slots in meal_plan_obj.items()
     }
 
+    logger.info(f"Generated meal plan for {len(plan_days)} days")
     return plan_days, feedback_str
 
 
-def build_id_to_name(recipes):
+def build_id_to_name(recipes: List[Dict[str, Any]]) -> Dict[str, str]:
+    """
+    Build a mapping from recipe IDs to recipe names.
+    
+    Args:
+        recipes: List of recipe dictionaries
+        
+    Returns:
+        Dictionary mapping recipe IDs to names
+    """
     return {r["id"]: r["name"] for r in recipes}
 
-def generate_days_list(latest_date, num_days):
+
+def generate_days_list(latest_date: str, num_days: int) -> List[str]:
+    """
+    Generate a list of days that need meal planning.
+    
+    Args:
+        latest_date: The latest date in the current meal plan (YYYY-MM-DD)
+        num_days: Number of days to plan for
+        
+    Returns:
+        List of dates (YYYY-MM-DD format) that need planning
+    """
     latest = datetime.strptime(latest_date, "%Y-%m-%d")
     today = datetime.today()
     start_date = max(latest, today) + timedelta(days=1)
     end_date = today + timedelta(days=num_days)
 
     if start_date > end_date:
+        logger.info("No days need planning (current plan extends beyond requested days)")
         return []
-    return [
+        
+    days_list = [
         (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
         for i in range((end_date - start_date).days + 1)
     ]
+    
+    logger.info(f"Generated {len(days_list)} days to plan: {days_list}")
+    return days_list
 
-async def main():
+async def main() -> None:
+    """
+    Main workflow:
+      1. Fetch all recipes from Mealie
+      2. Fetch current meal plan
+      3. Determine which days need planning
+      4. Generate meal plan using GPT
+      5. Update Mealie with the new plan
+    """
     _ = parser.parse_args()  # re-parse in case run directly
 
     num_days = SCRIPT_CONFIG["numbers"]["mealplan_length"]["value"]
     user_message = SCRIPT_CONFIG["texts"]["mealplan_message"]["text"]
 
+    await log(SCRIPT_CONFIG["id"], "status", "🔄 Starting meal planning process...")
+
     # 1) Fetch all recipes
+    await log(SCRIPT_CONFIG["id"], "status", "Fetching recipes from Mealie...")
     raw_recipes = await mealie_api.fetch_data("/api/recipes?full=true")
     if not raw_recipes or not isinstance(raw_recipes, dict):
-        await log(SCRIPT_CONFIG["id"], "status", "❌ Could not fetch recipes.")
+        error_msg = "❌ Could not fetch recipes from Mealie."
+        await log(SCRIPT_CONFIG["id"], "status", error_msg)
+        logger.error(error_msg)
         return
 
+    # Extract relevant recipe data for GPT
     recipes = [
         {
             "id": r["id"],
             "name": r["name"],
-            # "description": r["description"], #Description of the recipe adds no value to GPT to choose mealplan
+            # Description omitted as it doesn't add value for meal planning
             "tags": [t["name"] for t in r.get("tags", [])],
             "categories": [c["name"] for c in r.get("recipeCategory", [])]
         }
         for r in raw_recipes.get("items", [])
     ]
+    
+    logger.info(f"Fetched {len(recipes)} recipes from Mealie")
+    await log(SCRIPT_CONFIG["id"], "status", f"Found {len(recipes)} recipes")
 
     # 2) Fetch current meal plan
+    await log(SCRIPT_CONFIG["id"], "status", "Fetching current meal plan...")
+    # Include past 15 days to avoid repeating recent meals
     start_date = (datetime.today() - timedelta(days=15)).strftime("%Y-%m-%d")
     end_date = (datetime.today() + timedelta(days=num_days)).strftime("%Y-%m-%d")
+    
     mealplan_items = await mealie_api.get_meal_plan(start_date, end_date)
     if not mealplan_items:
-        await log(SCRIPT_CONFIG["id"], "status", "❌ No meal plan data available.")
+        error_msg = "❌ No meal plan data available."
+        await log(SCRIPT_CONFIG["id"], "status", error_msg)
+        logger.warning(error_msg)
         return
-        
+    
+    logger.info(f"Fetched {len(mealplan_items)} meal plan entries")
+    
+    # Simplify meal plan data for GPT
     mealplan = [
         {
             "date": r["date"],
@@ -190,17 +286,24 @@ async def main():
     ]
 
     # 3) Determine which days need planning
+    await log(SCRIPT_CONFIG["id"], "status", "Determining days that need planning...")
     latest_date = max((x["date"] for x in mealplan_items), default=datetime.now().strftime("%Y-%m-%d"))
     days = generate_days_list(latest_date, num_days)
+    
     if not days:
         await log(SCRIPT_CONFIG["id"], "status", "✅ No days need planning")
         return
 
-    # 4) GPT generate plan
+    await log(SCRIPT_CONFIG["id"], "status", f"Planning meals for {len(days)} days")
+
+    # 4) Generate plan with GPT
     plan, feedback = await async_generate_plan_and_feedback(recipes, mealplan, days, user_message)
+    
+    # Log feedback from GPT
     await log(SCRIPT_CONFIG["id"], "feedback", feedback)
     await log(SCRIPT_CONFIG["id"], "status", "GPT generated plan:")
 
+    # Display the generated plan
     id_to_name = build_id_to_name(recipes)
     for date in sorted(plan.keys()):
         await log(SCRIPT_CONFIG["id"], "status", f"\n{date}:")
@@ -210,35 +313,59 @@ async def main():
                 rname = id_to_name.get(rid, rid)
                 await log(SCRIPT_CONFIG["id"], "status", f"  {meal_type}: {rname}")
 
-    # 5) Update Mealie
-    if not DRY_RUN:
+    # 5) Update Mealie with the new plan
+    if DRY_RUN:
+        await log(SCRIPT_CONFIG["id"], "status", "🔍 DRY RUN: Skipping Mealie updates")
+        logger.info("DRY RUN mode - not updating Mealie")
+    else:
         await log(SCRIPT_CONFIG["id"], "status", "\nUpdating Mealie...")
+        update_count = 0
+        skip_count = 0
+        error_count = 0
+        
         for date, slots in plan.items():
             for meal_type, recipe_id in slots.items():
-                if recipe_id:
-                    exists = any(
-                        x["date"] == date
-                        and x["entryType"] == meal_type.lower()
-                        and x["recipeId"] == recipe_id
-                        for x in mealplan_items
-                    )
-                    if exists:
-                        await log(SCRIPT_CONFIG["id"], "status",
-                                  f"Skipping {meal_type} on {date}, already exists.")
+                if not recipe_id:
+                    continue
+                    
+                # Check if this meal already exists
+                exists = any(
+                    x["date"] == date
+                    and x["entryType"] == meal_type.lower()
+                    and x["recipeId"] == recipe_id
+                    for x in mealplan_items
+                )
+                
+                if exists:
+                    await log(SCRIPT_CONFIG["id"], "status",
+                              f"Skipping {meal_type} on {date}, already exists.")
+                    skip_count += 1
+                else:
+                    # Create new meal plan entry
+                    payload = {
+                        "date": date,
+                        "entryType": meal_type.lower(),
+                        "title": "",
+                        "text": "",
+                        "recipeId": recipe_id
+                    }
+                    
+                    ok = await mealie_api.create_mealplan_entry(payload)
+                    if ok:
+                        update_count += 1
                     else:
-                        payload = {
-                            "date": date,
-                            "entryType": meal_type.lower(),
-                            "title": "",
-                            "text": "",
-                            "recipeId": recipe_id
-                        }
-                        ok = await mealie_api.create_mealplan_entry(payload)
-                        if not ok:
-                            await log(SCRIPT_CONFIG["id"], "status",
-                                      f"❌ Failed to post meal for {date} {meal_type}")
+                        error_msg = f"❌ Failed to post meal for {date} {meal_type}"
+                        await log(SCRIPT_CONFIG["id"], "status", error_msg)
+                        logger.error(error_msg)
+                        error_count += 1
 
-    await log(SCRIPT_CONFIG["id"], "status", "✅ Done!")
+        # Log summary of updates
+        summary = f"✅ Done! Added {update_count} meals, skipped {skip_count} existing meals"
+        if error_count > 0:
+            summary += f", encountered {error_count} errors"
+            
+        await log(SCRIPT_CONFIG["id"], "status", summary)
+        logger.info(summary)
 
 # Assign main function to execute_function
 SCRIPT_CONFIG["execute_function"] = main
