@@ -8,13 +8,18 @@ This module:
 1. Fetches all recipes from Mealie
 2. Extracts all unique ingredients across recipes
 3. Uses GPT to identify ingredients that should be merged
-4. Outputs the results in JSON format for future automated fixing
+4. Prompts the user to accept or reject each merge suggestion via Home Assistant
+5. Updates recipes in Mealie if the user accepts the suggestion
 """
 
 import asyncio
+import json
 import logging
+import os
+import time
 from typing import Dict, List, Set, Any, Tuple, Optional
 
+import aiomqtt
 from core.plugin import Plugin
 from core.services import MqttService, MealieApiService, GptService
 
@@ -41,6 +46,13 @@ class IngredientMergerPlugin(Plugin):
         self._model_name = "gpt-4o"
         self._temperature = 0.1
         self._batch_size = 50  # Number of ingredients to analyze in one GPT call
+        
+        # State for user interaction
+        self._current_suggestion_index = 0
+        self._merge_suggestions = []
+        self._waiting_for_user_input = False
+        self._user_decision_received = asyncio.Event()
+        self._user_accepted = False
     
     @property
     def id(self) -> str:
@@ -77,32 +89,40 @@ class IngredientMergerPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "feedback": {"id": "feedback", "name": "Merger Feedback"}
+                "feedback": {"id": "feedback", "name": "Merger Feedback"},
+                "current_suggestion": {"id": "current_suggestion", "name": "Current Merge Suggestion"}
+            },
+            "buttons": {
+                "accept_button": {"id": "accept_button", "name": "Accept Merge"},
+                "reject_button": {"id": "reject_button", "name": "Reject Merge"}
             }
         }
     
-    def extract_ingredients(self, recipe_details: Dict[str, Any]) -> List[str]:
+    def extract_ingredients(self, recipe_details: Dict[str, Any]) -> List[Dict[str, str]]:
         """
-        Extract ingredient names from recipe details.
+        Extract ingredient names and IDs from recipe details.
         
         Args:
             recipe_details: Recipe details from Mealie API
             
         Returns:
-            List of ingredient names
+            List of dictionaries with ingredient names and IDs
         """
         ingredients = []
         
         for ing in recipe_details.get("recipeIngredient", []):
-            # Extract food name if available
-            if ing.get("food") and "name" in ing["food"]:
-                ingredients.append(ing["food"]["name"])
+            # Extract food name and ID if available
+            if ing.get("food") and "name" in ing["food"] and "id" in ing["food"]:
+                ingredients.append({
+                    "name": ing["food"]["name"],
+                    "id": ing["food"]["id"]
+                })
         
         return ingredients
     
     async def analyze_ingredients_with_gpt(
         self,
-        ingredients_by_recipe: Dict[str, List[str]]
+        ingredients_by_recipe: Dict[str, List[Dict[str, str]]]
     ) -> Dict[str, Any]:
         """
         Use GPT to identify ingredients that should be merged.
@@ -113,21 +133,27 @@ class IngredientMergerPlugin(Plugin):
         Returns:
             Dictionary with merge suggestions
         """
-        # Create a flat list of all unique ingredients
-        all_ingredients: Set[str] = set()
-        for ingredients in ingredients_by_recipe.values():
-            all_ingredients.update(ingredients)
+        # Create a flat list of all unique ingredient names
+        all_ingredient_names: Set[str] = set()
+        # Also create a mapping from ingredient names to their IDs
+        ingredient_ids_by_name: Dict[str, str] = {}
         
-        unique_ingredients = list(all_ingredients)
-        logger.info(f"Found {len(unique_ingredients)} unique ingredients across all recipes")
-        await self._mqtt.info(self.id, f"Found {len(unique_ingredients)} unique ingredients across all recipes")
+        for ingredients in ingredients_by_recipe.values():
+            for ingredient in ingredients:
+                name = ingredient["name"]
+                all_ingredient_names.add(name)
+                ingredient_ids_by_name[name] = ingredient["id"]
+        
+        unique_ingredient_names = list(all_ingredient_names)
+        logger.info(f"Found {len(unique_ingredient_names)} unique ingredients across all recipes")
+        await self._mqtt.info(self.id, f"Found {len(unique_ingredient_names)} unique ingredients across all recipes")
         
         # Process ingredients in batches to avoid token limits
         results = []
-        total_batches = (len(unique_ingredients) + self._batch_size - 1) // self._batch_size
+        total_batches = (len(unique_ingredient_names) + self._batch_size - 1) // self._batch_size
         
-        for i in range(0, len(unique_ingredients), self._batch_size):
-            batch = unique_ingredients[i:i+self._batch_size]
+        for i in range(0, len(unique_ingredient_names), self._batch_size):
+            batch = unique_ingredient_names[i:i+self._batch_size]
             batch_num = i // self._batch_size + 1
             
             await self._mqtt.info(
@@ -152,6 +178,7 @@ class IngredientMergerPlugin(Plugin):
                 "- 'red bell pepper' and 'green bell pepper' (different varieties)\n"
                 "- 'white wine' and 'red wine' (different varieties)\n"
                 "- 'onion' and 'yellow onion' (one is specific, one is general)\n\n"
+                "- 'different cheeses or ingredients that might be used interchangeably but are still not the same"
                 "STRICT rules for merging:\n"
                 "1. ONLY merge ingredients that are EXACTLY the same thing with different names\n"
                 "2. DO NOT merge ingredients that are in different forms (fresh vs. dried, whole vs. powder)\n"
@@ -164,14 +191,14 @@ class IngredientMergerPlugin(Plugin):
                 "Analyze this list and identify sets of ingredients that should be merged. "
                 "For each set, provide:\n"
                 "1. The ingredients that should be merged\n"
-                "2. A recommended standardized name\n"
+                "2. A recommended standardized name - Preferring the american english name. IMPORTANT: You must choose one of the existing ingredient names from the list, do not create a new name\n"
                 "3. A brief explanation of why they should be merged\n\n"
                 "Return your analysis in the following JSON format:\n"
                 "{\n"
                 '  "merge_suggestions": [\n'
                 "    {\n"
                 '      "ingredients": ["ingredient1", "ingredient2", ...],\n'
-                '      "recommended_name": "standardized name",\n'
+                '      "recommended_name": "one of the existing ingredient names",\n'
                 '      "reason": "brief explanation"\n'
                 "    },\n"
                 "    ...\n"
@@ -200,6 +227,7 @@ class IngredientMergerPlugin(Plugin):
                 )
         
         # Now find which recipes contain each ingredient that should be merged
+        # and add the ingredient IDs to the merge suggestions
         final_results = []
         
         for suggestion in results:
@@ -207,11 +235,21 @@ class IngredientMergerPlugin(Plugin):
             if not ingredients_to_merge:
                 continue
                 
+            # Add ingredient IDs to the suggestion
+            suggestion["ingredient_ids"] = {
+                name: ingredient_ids_by_name.get(name) 
+                for name in ingredients_to_merge 
+                if name in ingredient_ids_by_name
+            }
+            
             # Find recipes containing these ingredients
             recipes_with_ingredients = {}
             for recipe_slug, recipe_ingredients in ingredients_by_recipe.items():
+                # Extract just the names from the recipe ingredients
+                recipe_ingredient_names = [ing["name"] for ing in recipe_ingredients]
+                
                 # Check if any of the ingredients to merge are in this recipe
-                matching_ingredients = [ing for ing in ingredients_to_merge if ing in recipe_ingredients]
+                matching_ingredients = [ing for ing in ingredients_to_merge if ing in recipe_ingredient_names]
                 if matching_ingredients:
                     recipes_with_ingredients[recipe_slug] = matching_ingredients
             
@@ -221,10 +259,150 @@ class IngredientMergerPlugin(Plugin):
         
         return {"merge_suggestions": final_results}
     
+    async def setup_mqtt_buttons(self) -> None:
+        """Set up the MQTT buttons for user interaction."""
+        # Set up the accept button
+        accept_id = f"{self.id}_accept_button"
+        accept_command_topic = f"homeassistant/button/{accept_id}/command"
+        
+        # Set up the reject button
+        reject_id = f"{self.id}_reject_button"
+        reject_command_topic = f"homeassistant/button/{reject_id}/command"
+        
+        # Subscribe to both command topics in a single client connection
+        async with aiomqtt.Client(os.getenv("MQTT_BROKER"), int(os.getenv("MQTT_PORT", 1883))) as client:
+            await client.subscribe(accept_command_topic)
+            await client.subscribe(reject_command_topic)
+            
+            async for message in client.messages:
+                payload = message.payload.decode()
+                topic = message.topic.value
+                
+                if topic == accept_command_topic and payload == "PRESS":
+                    self._user_accepted = True
+                    self._user_decision_received.set()
+                    break
+                    
+                elif topic == reject_command_topic and payload == "PRESS":
+                    self._user_accepted = False
+                    self._user_decision_received.set()
+                    break
+    
+    async def present_suggestion_to_user(self, suggestion: Dict[str, Any], index: int, total: int) -> bool:
+        """
+        Present a merge suggestion to the user and wait for their decision.
+        
+        Args:
+            suggestion: The merge suggestion to present
+            index: The current suggestion index (1-based)
+            total: The total number of suggestions
+            
+        Returns:
+            True if the user accepted the suggestion, False otherwise
+        """
+        # Reset the event and user decision
+        self._user_decision_received.clear()
+        self._user_accepted = False
+        
+        # Extract suggestion details
+        ingredients = suggestion.get("ingredients", [])
+        recommended = suggestion.get("recommended_name", "")
+        reason = suggestion.get("reason", "")
+        recipes = suggestion.get("recipes", {})
+        
+        # Create a markdown-formatted message for the current suggestion
+        markdown = [f"## Merge Suggestion {index}/{total}", ""]
+        markdown.append(f"**Merge these ingredients:** {', '.join(ingredients)}")
+        markdown.append(f"**Into standardized name:** {recommended}")
+        markdown.append(f"**Reason:** {reason}")
+        
+        # Add recipe information
+        if recipes:
+            markdown.append("")
+            markdown.append(f"**Found in {len(recipes)} recipes:**")
+            recipe_list = []
+            for recipe_slug, matching_ingredients in recipes.items():
+                recipe_name = recipe_slug.replace("-", " ").title()
+                ingredients_used = ", ".join(matching_ingredients)
+                recipe_list.append(f"- {recipe_name} (uses: {ingredients_used})")
+            markdown.append("\n".join(recipe_list))
+        
+        markdown.append("")
+        markdown.append("**Do you want to merge these ingredients?**")
+        markdown.append("Use the Accept or Reject buttons below.")
+        
+        # Log the suggestion to the current_suggestion sensor
+        await self._mqtt.log(self.id, "current_suggestion", "\n".join(markdown), reset=True)
+        
+        # Wait for user decision with a timeout
+        try:
+            # Start listening for button presses in a separate task
+            button_task = asyncio.create_task(self.setup_mqtt_buttons())
+            
+            # Wait for the user decision or timeout
+            await asyncio.wait_for(self._user_decision_received.wait(), timeout=3600)  # 1 hour timeout
+            
+            # Cancel the button task
+            button_task.cancel()
+            
+            return self._user_accepted
+        except asyncio.TimeoutError:
+            await self._mqtt.warning(self.id, "User decision timeout. Skipping this suggestion.")
+            return False
+    
+    async def update_recipe_ingredients(self, recipe_slug: str, old_ingredient: str, new_ingredient: str) -> bool:
+        """
+        Update a recipe's ingredients in Mealie.
+        
+        Args:
+            recipe_slug: The recipe slug
+            old_ingredient: The old ingredient name to replace
+            new_ingredient: The new ingredient name to use
+            
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        try:
+            # Use the MealieApiService to update the recipe ingredient
+            success = await self._mealie.update_recipe_ingredient(recipe_slug, old_ingredient, new_ingredient)
+            
+            if success:
+                logger.info(f"Updated recipe '{recipe_slug}': replaced '{old_ingredient}' with '{new_ingredient}'")
+            else:
+                logger.warning(f"Failed to update recipe '{recipe_slug}'")
+                
+            return success
+                
+        except Exception as e:
+            logger.error(f"Error updating recipe '{recipe_slug}': {str(e)}", exc_info=True)
+            return False
+    
+    async def setup(self) -> None:
+        """Set up the plugin's MQTT entities."""
+        # Register the switch
+        await self._mqtt.setup_mqtt_switch(self.id, self.name)
+        
+        # Register the sensors
+        for sensor_id, sensor_config in self.get_mqtt_entities().get("sensors", {}).items():
+            await self._mqtt.setup_mqtt_sensor(
+                self.id, 
+                sensor_config["id"], 
+                sensor_config["name"]
+            )
+        
+        # Register the buttons
+        for button_id, button_config in self.get_mqtt_entities().get("buttons", {}).items():
+            await self._mqtt.setup_mqtt_button(
+                self.id, 
+                button_config["id"], 
+                button_config["name"]
+            )
+    
     async def execute(self) -> None:
         """Execute the ingredient merger plugin."""
         try:
             # Initialize
+            await self.setup()
             await self._mqtt.info(self.id, "Starting ingredient merger analysis...")
             
             # 1. Fetch all recipes
@@ -269,64 +447,156 @@ class IngredientMergerPlugin(Plugin):
             await self._mqtt.info(self.id, "Analyzing ingredients with GPT...")
             results = await self.analyze_ingredients_with_gpt(ingredients_by_recipe)
             
-            # 4. Log results
-            merge_suggestions = results.get("merge_suggestions", [])
-            if merge_suggestions:
-                summary = f"Found {len(merge_suggestions)} sets of ingredients that should be merged"
-                await self._mqtt.success(self.id, summary)
-                
-                # Store the full JSON results for potential future automation
-                import json
-                formatted_json = json.dumps(results, indent=2)
-                
-                # Create a concise, markdown-formatted summary for Home Assistant
-                markdown_summary = ["## Ingredient Merger Results", ""]
-                markdown_summary.append(f"Found **{len(merge_suggestions)}** sets of ingredients that should be merged.")
-                markdown_summary.append("")
-                
-                for i, suggestion in enumerate(merge_suggestions):
-                    ingredients = suggestion.get("ingredients", [])
-                    recommended = suggestion.get("recommended_name", "")
-                    reason = suggestion.get("reason", "")
-                    recipes = suggestion.get("recipes", {})
-                    
-                    # Add a header for each merge suggestion
-                    markdown_summary.append(f"### {i+1}. Merge: {', '.join(ingredients)}")
-                    markdown_summary.append(f"**Recommended name:** {recommended}")
-                    markdown_summary.append(f"**Reason:** {reason}")
-                    
-                    # Add recipe information in a clean format
-                    if recipes:
-                        markdown_summary.append("")
-                        markdown_summary.append(f"**Found in {len(recipes)} recipes:**")
-                        recipe_list = []
-                        for recipe_slug, matching_ingredients in recipes.items():
-                            recipe_name = recipe_slug.replace("-", " ").title()
-                            ingredients_used = ", ".join(matching_ingredients)
-                            recipe_list.append(f"- {recipe_name} (uses: {ingredients_used})")
-                        markdown_summary.append("\n".join(recipe_list))
-                    
-                    # Add a separator between merge suggestions
-                    markdown_summary.append("")
-                    markdown_summary.append("---")
-                    markdown_summary.append("")
-                
-                # Log the markdown summary to the feedback sensor
-                await self._mqtt.log(self.id, "feedback", "\n".join(markdown_summary), reset=True)
-                
-                # Log a shorter summary to the status sensor
-                status_summary = [f"Found {len(merge_suggestions)} sets of ingredients that should be merged."]
-                for i, suggestion in enumerate(merge_suggestions):
-                    ingredients = suggestion.get("ingredients", [])
-                    recommended = suggestion.get("recommended_name", "")
-                    status_summary.append(f"{i+1}. Merge: {', '.join(ingredients)} → {recommended}")
-                
-                await self._mqtt.log(self.id, "status", "\n".join(status_summary), reset=True)
-            else:
+            # 4. Process results
+            self._merge_suggestions = results.get("merge_suggestions", [])
+            if not self._merge_suggestions:
                 await self._mqtt.info(self.id, "No ingredients found that should be merged.")
+                return
+                
+            summary = f"Found {len(self._merge_suggestions)} sets of ingredients that should be merged"
+            await self._mqtt.success(self.id, summary)
             
-            # 5. Complete
-            await self._mqtt.success(self.id, "Ingredient merger analysis complete!")
+            # Create a concise, markdown-formatted summary for Home Assistant
+            markdown_summary = ["## Ingredient Merger Results", ""]
+            markdown_summary.append(f"Found **{len(self._merge_suggestions)}** sets of ingredients that should be merged.")
+            markdown_summary.append("")
+            markdown_summary.append("Each suggestion will be presented for your approval.")
+            markdown_summary.append("")
+            
+            # Log the markdown summary to the feedback sensor
+            await self._mqtt.log(self.id, "feedback", "\n".join(markdown_summary), reset=True)
+            
+            # 5. Present each suggestion to the user and process their decisions
+            accepted_count = 0
+            rejected_count = 0
+            
+            for i, suggestion in enumerate(self._merge_suggestions):
+                # Present the suggestion to the user
+                user_accepted = await self.present_suggestion_to_user(
+                    suggestion, i+1, len(self._merge_suggestions)
+                )
+                
+                if user_accepted:
+                    accepted_count += 1
+                    await self._mqtt.success(
+                        self.id, 
+                        f"Accepted suggestion {i+1}/{len(self._merge_suggestions)}"
+                    )
+                    
+                    # Get the ingredients to merge and the recommended name
+                    ingredients = suggestion.get("ingredients", [])
+                    recommended = suggestion.get("recommended_name", "")
+                    ingredient_ids = suggestion.get("ingredient_ids", {})
+                    
+                    # Use the Mealie API's dedicated merge endpoint
+                    merge_success_count = 0
+                    merge_fail_count = 0
+                    
+                    # Get the ID of the recommended ingredient
+                    recommended_id = ingredient_ids.get(recommended)
+                    if not recommended_id:
+                        logger.warning(f"Could not find ID for recommended ingredient: {recommended}")
+                        await self._mqtt.warning(
+                            self.id,
+                            f"Could not find ID for recommended ingredient: {recommended}"
+                        )
+                        continue
+                    
+                    for ingredient in ingredients:
+                        if ingredient != recommended:  # Skip if it's already the recommended name
+                            # Get the ID of the ingredient to merge
+                            ingredient_id = ingredient_ids.get(ingredient)
+                            
+                            # If exact match not found, try case-insensitive match
+                            if not ingredient_id:
+                                ingredient_lower = ingredient.lower()
+                                for name, id in ingredient_ids.items():
+                                    if name.lower() == ingredient_lower:
+                                        ingredient_id = id
+                                        logger.debug(f"Found case-insensitive match for '{ingredient}': {name} (ID: {id})")
+                                        break
+                            
+                            # If still not found, try partial match
+                            if not ingredient_id:
+                                ingredient_lower = ingredient.lower()
+                                for name, id in ingredient_ids.items():
+                                    if ingredient_lower in name.lower() or name.lower() in ingredient_lower:
+                                        ingredient_id = id
+                                        logger.debug(f"Found partial match for '{ingredient}': {name} (ID: {id})")
+                                        break
+                            
+                            if not ingredient_id:
+                                logger.warning(f"Could not find ID for ingredient: {ingredient}")
+                                await self._mqtt.warning(
+                                    self.id,
+                                    f"Could not find ID for ingredient: {ingredient}"
+                                )
+                                merge_fail_count += 1
+                                continue
+                            
+                            logger.debug(f"Merging '{ingredient}' (ID: {ingredient_id}) into '{recommended}' (ID: {recommended_id})")
+                            await self._mqtt.info(
+                                self.id,
+                                f"Merging '{ingredient}' into '{recommended}'..."
+                            )
+                            
+                            # Use the IDs for the merge operation
+                            success = await self._mealie.merge_foods(ingredient_id, recommended_id)
+                            
+                            if success:
+                                merge_success_count += 1
+                                logger.info(f"Successfully merged '{ingredient}' into '{recommended}'")
+                                await self._mqtt.success(
+                                    self.id,
+                                    f"Successfully merged '{ingredient}' into '{recommended}'"
+                                )
+                            else:
+                                merge_fail_count += 1
+                                logger.warning(f"Failed to merge '{ingredient}' into '{recommended}'")
+                                await self._mqtt.warning(
+                                    self.id,
+                                    f"Failed to merge '{ingredient}' into '{recommended}'"
+                                )
+                    
+                    # Log the merge results
+                    if merge_success_count > 0:
+                        await self._mqtt.success(
+                            self.id,
+                            f"Successfully merged {merge_success_count} ingredients"
+                        )
+                    if merge_fail_count > 0:
+                        await self._mqtt.warning(
+                            self.id,
+                            f"Failed to merge {merge_fail_count} ingredients"
+                        )
+                else:
+                    rejected_count += 1
+                    await self._mqtt.info(
+                        self.id, 
+                        f"Rejected suggestion {i+1}/{len(self._merge_suggestions)}"
+                    )
+            
+            # 6. Complete with summary
+            final_summary = [
+                "## Ingredient Merger Complete",
+                "",
+                f"Processed **{len(self._merge_suggestions)}** merge suggestions:",
+                f"- **{accepted_count}** accepted and updated in Mealie",
+                f"- **{rejected_count}** rejected",
+                ""
+            ]
+            
+            # Clear the current suggestion display
+            await self._mqtt.log(self.id, "current_suggestion", "All suggestions have been processed.", reset=True)
+            
+            # Update the feedback with the final summary
+            await self._mqtt.log(self.id, "feedback", "\n".join(final_summary), reset=True)
+            
+            # Log a success message
+            await self._mqtt.success(
+                self.id, 
+                f"Ingredient merger complete! Accepted: {accepted_count}, Rejected: {rejected_count}"
+            )
             
         except Exception as e:
             error_msg = f"Error in ingredient merger: {str(e)}"

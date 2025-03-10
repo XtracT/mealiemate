@@ -127,6 +127,15 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                 plugin_configs[plugin.id][f"_{text_id}"] = text["text"]
                 logger.info(f"Stored initial text config for {plugin.id}: _{text_id}={text['text']}")
                 
+            # Set up buttons for plugin interaction
+            for button_id, button in entities.get("buttons", {}).items():
+                await mqtt_service.setup_mqtt_button(
+                    plugin.id,
+                    button["id"],
+                    button["name"]
+                )
+                logger.info(f"Registered MQTT button: {button['name']}")
+                
             logger.info(f"Set up MQTT entities for plugin: {plugin.id}")
         except Exception as e:
             logger.error(f"Error setting up MQTT entities for plugin {plugin_id}: {str(e)}")
@@ -245,6 +254,7 @@ async def mqtt_listener() -> None:
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/switch/+/set")
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/number/+/set")
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/text/+/set")
+            await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/button/+/command")
             logger.info("Subscribed to MQTT control topics")
 
             # Process incoming messages
@@ -367,6 +377,12 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
             logger.error(f"Unknown text entity: {entity_id} for plugin {plugin_id}")
         return
 
+    # Handle button commands
+    if "button" in topic and payload == "PRESS":
+        logger.info(f"Button press received for {plugin_id}_{entity_id}")
+        await mqtt_service.info(plugin_id, f"Button {entity_id} pressed", category="data")
+        return
+        
     # Handle switch commands (ON/OFF)
     if payload == "ON":
         if plugin_id in running_tasks:
@@ -387,7 +403,7 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
             await mqtt_service.info(plugin_id, "Plugin cancelled or timed out during shutdown", category="stop")
             pass
     else:
-        await mqtt_service.warning(plugin_id, f"Unknown switch command: {payload}")
+        await mqtt_service.warning(plugin_id, f"Unknown command: {payload}")
 
 async def mqtt_message_processor(registry: PluginRegistry, container: Container) -> None:
     """

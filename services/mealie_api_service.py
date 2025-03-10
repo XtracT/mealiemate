@@ -182,3 +182,30 @@ class MealieApiServiceImpl(MealieApiService):
             True if update was successful, False otherwise
         """
         return await mealie_api.update_recipe_tags_categories(recipe_slug, payload)
+    
+    async def update_recipe_ingredient(self, recipe_slug: str, old_ingredient: str, new_ingredient: str) -> bool:
+        """
+        Update an ingredient name in a recipe.
+        
+        Args:
+            recipe_slug: The recipe slug identifier
+            old_ingredient: The old ingredient name to replace
+            new_ingredient: The new ingredient name to use
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        return await mealie_api.update_recipe_ingredient(recipe_slug, old_ingredient, new_ingredient)
+    
+    async def merge_foods(self, from_food_name: str, to_food_name: str) -> bool:
+        """
+        Merge two foods using the Mealie API's dedicated merge endpoint.
+        
+        Args:
+            from_food_name: The name of the food to merge from (will be replaced)
+            to_food_name: The name of the food to merge to (will be kept)
+            
+        Returns:
+            True if merge was successful, False otherwise
+        """
+        return await mealie_api.merge_foods(from_food_name, to_food_name)

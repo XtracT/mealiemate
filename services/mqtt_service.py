@@ -100,6 +100,20 @@ class MqttServiceImpl(MqttService):
         """
         return await ha_mqtt.setup_mqtt_text(plugin_id, text_id, name, default_value, max_length)
     
+    async def setup_mqtt_button(self, plugin_id: str, button_id: str, name: str) -> bool:
+        """
+        Register an MQTT button in Home Assistant.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            button_id: Unique identifier for this specific button
+            name: Human-readable name for the button
+            
+        Returns:
+            True if registration was successful, False otherwise
+        """
+        return await ha_mqtt.setup_mqtt_button(plugin_id, button_id, name)
+    
     async def setup_mqtt_service_status(self, plugin_id: str, sensor_id: str, name: str) -> bool:
         """
         Register an MQTT binary sensor to indicate the service status in Home Assistant.

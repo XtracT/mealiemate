@@ -97,6 +97,21 @@ class MqttService(ABC):
         pass
     
     @abstractmethod
+    async def setup_mqtt_button(self, plugin_id: str, button_id: str, name: str) -> bool:
+        """
+        Register an MQTT button in Home Assistant.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            button_id: Unique identifier for this specific button
+            name: Human-readable name for the button
+            
+        Returns:
+            True if registration was successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
     async def setup_mqtt_service_status(self, plugin_id: str, sensor_id: str, name: str) -> bool:
         """
         Register an MQTT binary sensor to indicate the service status in Home Assistant.
@@ -358,6 +373,35 @@ class MealieApiService(ABC):
             
         Returns:
             True if update was successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    async def update_recipe_ingredient(self, recipe_slug: str, old_ingredient: str, new_ingredient: str) -> bool:
+        """
+        Update an ingredient name in a recipe.
+        
+        Args:
+            recipe_slug: The recipe slug identifier
+            old_ingredient: The old ingredient name to replace
+            new_ingredient: The new ingredient name to use
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    async def merge_foods(self, from_food_name: str, to_food_name: str) -> bool:
+        """
+        Merge two foods using the Mealie API's dedicated merge endpoint.
+        
+        Args:
+            from_food_name: The name of the food to merge from (will be replaced)
+            to_food_name: The name of the food to merge to (will be kept)
+            
+        Returns:
+            True if merge was successful, False otherwise
         """
         pass
 

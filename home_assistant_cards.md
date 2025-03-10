@@ -38,7 +38,8 @@ cards:
 ## 2. Ingredient Merger Card
 
 **Purpose:**  
-This card manages the Ingredient Merger plugin and displays feedback messages for ingredient merging suggestions.
+This card manages the Ingredient Merger plugin and displays feedback messages for ingredient merging suggestions. It also provides an interactive interface for accepting or rejecting merge suggestions.
+
 
 **YAML:**
 ```yaml
@@ -50,18 +51,29 @@ style: |
   }
 cards:
   - type: custom:mushroom-template-card
-    primary: Ingredient Merger
-    icon: mdi:food-variant
-    entity: switch.mealiemate_ingredient_merger
-    icon_color: |-
-      {% if is_state('switch.mealiemate_ingredient_merger', 'on') %}
-        blue
-      {% else %}
-        grey
-      {% endif %}
+    primary: Current Merge Suggestion
+    icon: mdi:food-fork-drink
+    secondary: |-
+      Decide whether to merge these ingredients
   - type: markdown
     content: |
-      {{ state_attr('sensor.mealiemate_merger_feedback', 'full_text') }}
+      {{ state_attr('sensor.mealiemate_current_suggestion', 'full_text') }}
+  - type: horizontal-stack
+    cards:
+      - type: custom:mushroom-entity-card
+        entity: button.mealiemate_ingredient_merger_accept_button
+        name: Accept
+        icon: mdi:check-circle
+        icon_color: green
+        tap_action:
+          action: toggle
+      - type: custom:mushroom-entity-card
+        entity: button.mealiemate_ingredient_merger_reject_button
+        name: Reject
+        icon: mdi:close-circle
+        icon_color: red
+        tap_action:
+          action: toggle
 ```
 
 ---

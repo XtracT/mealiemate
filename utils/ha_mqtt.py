@@ -258,6 +258,40 @@ async def setup_mqtt_text(
         logger.error(f"Failed to setup MQTT text '{text_name}': {str(e)}")
         return False
 
+async def setup_mqtt_button(script_id: str, button_id: str, button_name: str) -> bool:
+    """
+    Register an MQTT button in Home Assistant.
+    
+    Args:
+        script_id: Unique identifier for the script
+        button_id: Unique identifier for this specific button
+        button_name: Human-readable name for the button
+        
+    Returns:
+        True if registration was successful, False otherwise
+    """
+    try:
+        unique_id = f"{script_id}_{button_id}"
+        command_topic = f"{MQTT_DISCOVERY_PREFIX}/button/{unique_id}/command"
+        config_topic = f"{MQTT_DISCOVERY_PREFIX}/button/{unique_id}/config"
+
+        discovery_payload = {
+            "name": f"{button_name}",
+            "command_topic": command_topic,
+            "unique_id": unique_id,
+            "payload_press": "PRESS",
+            "icon": "mdi:gesture-tap-button",
+            "device": DEVICE_INFO,
+        }
+
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+            logger.info(f"Registered MQTT button: {button_name}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to setup MQTT button '{button_name}': {str(e)}")
+        return False
+
 async def setup_mqtt_service_status(script_id: str, sensor_id: str, sensor_name: str) -> bool:
     """
     Register an MQTT binary sensor to indicate the service status in Home Assistant.
