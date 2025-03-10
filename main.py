@@ -53,9 +53,10 @@ MQTT_DISCOVERY_PREFIX = "homeassistant"
 if not MQTT_BROKER:
     logger.warning("MQTT_BROKER not found in environment variables")
 
-# Track running tasks and message queue
+# Track running tasks, message queue, and plugin configurations
 running_tasks: Dict[str, asyncio.Task] = {}
 mqtt_message_queue: asyncio.Queue = asyncio.Queue()
+plugin_configs: Dict[str, Dict[str, Any]] = {}  # Store plugin configurations persistently
 
 async def setup_mqtt_entities(registry: PluginRegistry, container: Container) -> None:
     """
@@ -104,6 +105,12 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                     number["name"],
                     number["value"]
                 )
+                
+                # Store initial value in persistent configuration
+                if plugin.id not in plugin_configs:
+                    plugin_configs[plugin.id] = {}
+                plugin_configs[plugin.id][f"_{number_id}"] = number["value"]
+                logger.info(f"Stored initial number config for {plugin.id}: _{number_id}={number['value']}")
 
             # Set up text inputs for plugin configuration
             for text_id, text in entities.get("texts", {}).items():
@@ -113,6 +120,12 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                     text["name"],
                     text["text"]
                 )
+                
+                # Store initial value in persistent configuration
+                if plugin.id not in plugin_configs:
+                    plugin_configs[plugin.id] = {}
+                plugin_configs[plugin.id][f"_{text_id}"] = text["text"]
+                logger.info(f"Stored initial text config for {plugin.id}: _{text_id}={text['text']}")
                 
             logger.info(f"Set up MQTT entities for plugin: {plugin.id}")
         except Exception as e:
@@ -165,6 +178,16 @@ async def execute_plugin(plugin_id: str, registry: PluginRegistry, container: Co
     # Create plugin instance with dependencies injected
     try:
         plugin = container.inject(plugin_cls)
+        
+        # Apply any stored configuration values to the plugin
+        if plugin_id in plugin_configs:
+            logger.info(f"Applying stored configuration for {plugin_id}: {plugin_configs[plugin_id]}")
+            for attr_name, value in plugin_configs[plugin_id].items():
+                if hasattr(plugin, attr_name):
+                    setattr(plugin, attr_name, value)
+                    logger.info(f"Applied stored config {attr_name}={value} to {plugin_id}")
+                else:
+                    logger.warning(f"Plugin {plugin_id} has no attribute {attr_name}")
     except Exception as e:
         logger.error(f"Error creating plugin instance for {plugin_id}: {str(e)}")
         await mqtt_service.error(plugin_id, f"Error creating plugin instance: {str(e)}")
@@ -292,10 +315,24 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
     if "number" in topic:
         try:
             # Update the plugin's configuration
-            # This would require a mechanism to update plugin configuration
-            # For now, we just log the update
             value = int(payload)
-            await mqtt_service.info(plugin_id, f"Updated number {entity_id} to {value}", category="data")
+            
+            # Update the plugin's instance variable based on entity_id
+            # This assumes the plugin has instance variables named _entity_id
+            attr_name = f"_{entity_id}"
+            if hasattr(plugin, attr_name):
+                # Update the instance variable
+                setattr(plugin, attr_name, value)
+                
+                # Store in persistent configuration
+                if plugin_id not in plugin_configs:
+                    plugin_configs[plugin_id] = {}
+                plugin_configs[plugin_id][attr_name] = value
+                
+                await mqtt_service.info(plugin_id, f"Updated number {entity_id} to {value}", category="data")
+            else:
+                logger.warning(f"Plugin {plugin_id} has no attribute {attr_name}")
+                await mqtt_service.warning(plugin_id, f"Unknown number entity: {entity_id}")
         except ValueError:
             await mqtt_service.error(plugin_id, f"Invalid number value received: {payload}")
         except KeyError:
@@ -306,10 +343,24 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
     if "text" in topic:
         try:
             # Update the plugin's configuration
-            # This would require a mechanism to update plugin configuration
-            # For now, we just log the update
             text = str(payload)
-            await mqtt_service.info(plugin_id, f"Updated text {entity_id} to: {text[:30]}...", category="data")
+            
+            # Update the plugin's instance variable based on entity_id
+            # This assumes the plugin has instance variables named _entity_id
+            attr_name = f"_{entity_id}"
+            if hasattr(plugin, attr_name):
+                # Update the instance variable
+                setattr(plugin, attr_name, text)
+                
+                # Store in persistent configuration
+                if plugin_id not in plugin_configs:
+                    plugin_configs[plugin_id] = {}
+                plugin_configs[plugin_id][attr_name] = text
+                
+                await mqtt_service.info(plugin_id, f"Updated text {entity_id} to: {text[:30]}...", category="data")
+            else:
+                logger.warning(f"Plugin {plugin_id} has no attribute {attr_name}")
+                await mqtt_service.warning(plugin_id, f"Unknown text entity: {entity_id}")
         except ValueError:
             await mqtt_service.error(plugin_id, f"Invalid string value received: {payload}")
         except KeyError:
