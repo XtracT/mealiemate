@@ -459,3 +459,78 @@ async def progress(script_id: str, message: str, sensor_id: Optional[str] = None
 async def success(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
     """Log a success message."""
     return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=False, log_to_console=False)
+
+async def setup_mqtt_progress(script_id: str, sensor_id: str, sensor_name: str) -> bool:
+    """
+    Register an MQTT progress sensor in Home Assistant.
+    
+    Args:
+        script_id: Unique identifier for the script
+        sensor_id: Unique identifier for this specific sensor
+        sensor_name: Human-readable name for the sensor
+        
+    Returns:
+        True if registration was successful, False otherwise
+    """
+    try:
+        unique_id = f"{script_id}_{sensor_id}"
+        state_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{unique_id}/state"
+        attributes_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{unique_id}/attributes"
+        config_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{unique_id}/config"
+
+        discovery_payload = {
+            "name": f"{sensor_name}",
+            "state_topic": state_topic,
+            "json_attributes_topic": attributes_topic,
+            "unique_id": unique_id,
+            "unit_of_measurement": "%",
+            "icon": "mdi:percent",
+            "device": DEVICE_INFO,
+        }
+
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+            # Initialize with 0%
+            await client.publish(state_topic, "0", retain=True)
+            await client.publish(attributes_topic, json.dumps({"activity": ""}), retain=True)
+            logger.info(f"Registered MQTT progress sensor: {sensor_name}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to setup MQTT progress sensor '{sensor_name}': {str(e)}")
+        return False
+
+async def update_progress(script_id: str, sensor_id: str, percentage: int, activity: str) -> bool:
+    """
+    Update the progress sensor with current percentage and activity.
+    
+    Args:
+        script_id: Unique identifier for the script
+        sensor_id: Unique identifier for this specific sensor
+        percentage: Progress percentage (0-100)
+        activity: Current activity description
+        
+    Returns:
+        True if update was successful, False otherwise
+    """
+    try:
+        unique_id = f"{script_id}_{sensor_id}"
+        state_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{unique_id}/state"
+        attributes_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{unique_id}/attributes"
+
+        # Ensure percentage is within bounds
+        percentage = max(0, min(100, percentage))
+        
+        # Special handling for completion and stopped states
+        if percentage == 100:
+            activity = "Finished"
+        elif percentage == 0 and activity.lower() == "stopped":
+            activity = "Stopped"
+        
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(state_topic, str(percentage), retain=True)
+            await client.publish(attributes_topic, json.dumps({"activity": activity}), retain=True)
+            logger.debug(f"Updated progress for {script_id}: {percentage}% - {activity}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to update progress for {script_id}: {str(e)}")
+        return False

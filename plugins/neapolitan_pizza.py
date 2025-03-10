@@ -87,7 +87,8 @@ class NeapolitanPizzaPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "dough_recipe": {"id": "dough_recipe", "name": "Pizza Dough Recipe"}
+                "dough_recipe": {"id": "dough_recipe", "name": "Pizza Dough Recipe"},
+                "progress": {"id": "progress", "name": "Pizza Calculation Progress"}
             },
             "numbers": {
                 "number_of_balls": {"id": "number_of_balls", "name": "Number of Balls", "value": self._number_of_balls},
@@ -288,8 +289,13 @@ class NeapolitanPizzaPlugin(Plugin):
         logger.info("Starting Neapolitan pizza dough calculation")
         
         try:
+            # Set up progress sensor
+            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Pizza Calculation Progress")
+            await self._mqtt.update_progress(self.id, "progress", 0, "Starting pizza dough calculation")
+            
             # 1) Read user inputs
             await self._mqtt.info(self.id, "Starting pizza dough calculation...", category="start")
+            await self._mqtt.update_progress(self.id, "progress", 20, "Reading input parameters")
             num_balls = self._number_of_balls
             ball_weight = self._ball_weight
             hydration_percent = self._hydration
@@ -306,6 +312,7 @@ class NeapolitanPizzaPlugin(Plugin):
             )
             
             # 2) Calculate base ingredients
+            await self._mqtt.update_progress(self.id, "progress", 40, "Calculating base ingredients")
             ingredients = self.calculate_dough_ingredients(
                 num_balls, 
                 ball_weight, 
@@ -314,10 +321,12 @@ class NeapolitanPizzaPlugin(Plugin):
             )
             
             # 3) Calculate fermentation schedule
+            await self._mqtt.update_progress(self.id, "progress", 60, "Calculating fermentation schedule")
             schedule = self.calculate_fermentation_schedule(total_time, fridge_temp)
             initial_room_temp_hours, fridge_hours, final_ambient_rest_hours = schedule
             
             # 4) Calculate equivalent hours and yeast amount
+            await self._mqtt.update_progress(self.id, "progress", 80, "Calculating yeast amount")
             eq_hours = self.calculate_equivalent_hours(
                 initial_room_temp_hours,
                 fridge_hours,
@@ -338,12 +347,14 @@ class NeapolitanPizzaPlugin(Plugin):
             )
             
             # 5) Format recipe output
+            await self._mqtt.update_progress(self.id, "progress", 90, "Formatting recipe output")
             markdown_text = self.format_recipe_output(ingredients, schedule, yeast_grams)
             
             # 6) Log via MQTT
             await self._mqtt.log(self.id, "dough_recipe", markdown_text, reset=True)
             await self._mqtt.success(self.id, "Pizza dough recipe calculated successfully")
             logger.info("Pizza dough recipe published successfully")
+            await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
             
         except Exception as e:
             logger.error(f"Error calculating pizza dough recipe: {str(e)}", exc_info=True)

@@ -90,7 +90,8 @@ class IngredientMergerPlugin(Plugin):
             "switch": True,
             "sensors": {
                 "feedback": {"id": "feedback", "name": "Merger Feedback"},
-                "current_suggestion": {"id": "current_suggestion", "name": "Current Merge Suggestion"}
+                "current_suggestion": {"id": "current_suggestion", "name": "Current Merge Suggestion"},
+                "progress": {"id": "progress", "name": "Merger Progress"}
             },
             "buttons": {
                 "accept_button": {"id": "accept_button", "name": "Accept Merge"},
@@ -405,8 +406,13 @@ class IngredientMergerPlugin(Plugin):
             await self.setup()
             await self._mqtt.info(self.id, "Starting ingredient merger analysis...")
             
+            # Set up progress sensor
+            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Merger Progress")
+            await self._mqtt.update_progress(self.id, "progress", 0, "Starting ingredient merger")
+            
             # 1. Fetch all recipes
             await self._mqtt.info(self.id, "Fetching recipes from Mealie...")
+            await self._mqtt.update_progress(self.id, "progress", 5, "Fetching recipes")
             recipes = await self._mealie.get_all_recipes()
             if not recipes:
                 logger.warning("No recipes found in Mealie")
@@ -415,6 +421,7 @@ class IngredientMergerPlugin(Plugin):
 
             await self._mqtt.success(self.id, f"Fetched {len(recipes)} recipes.")
             logger.debug(f"Fetched {len(recipes)} recipes from Mealie")
+            await self._mqtt.update_progress(self.id, "progress", 10, "Extracting ingredients")
             
             # 2. Extract ingredients from each recipe
             ingredients_by_recipe = {}
@@ -438,6 +445,8 @@ class IngredientMergerPlugin(Plugin):
                     if index % 10 == 0 or index == len(recipes) - 1:
                         progress = f"Progress: {index+1}/{len(recipes)} recipes processed"
                         await self._mqtt.progress(self.id, progress)
+                        progress_percentage = 10 + int(20 * (index / len(recipes)))
+                        await self._mqtt.update_progress(self.id, "progress", progress_percentage, f"Extracting ingredients ({index+1}/{len(recipes)})")
                     
                 except Exception as e:
                     logger.error(f"Error processing recipe {recipe.get('slug', 'unknown')}: {str(e)}", exc_info=True)
@@ -445,16 +454,19 @@ class IngredientMergerPlugin(Plugin):
             
             # 3. Analyze ingredients with GPT
             await self._mqtt.info(self.id, "Analyzing ingredients with GPT...")
+            await self._mqtt.update_progress(self.id, "progress", 30, "Analyzing ingredients with GPT")
             results = await self.analyze_ingredients_with_gpt(ingredients_by_recipe)
             
             # 4. Process results
             self._merge_suggestions = results.get("merge_suggestions", [])
             if not self._merge_suggestions:
                 await self._mqtt.info(self.id, "No ingredients found that should be merged.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No merge suggestions found")
                 return
                 
             summary = f"Found {len(self._merge_suggestions)} sets of ingredients that should be merged"
             await self._mqtt.success(self.id, summary)
+            await self._mqtt.update_progress(self.id, "progress", 40, f"Found {len(self._merge_suggestions)} merge suggestions")
             
             # Create a concise, markdown-formatted summary for Home Assistant
             markdown_summary = ["## Ingredient Merger Results", ""]
@@ -470,8 +482,15 @@ class IngredientMergerPlugin(Plugin):
             accepted_count = 0
             rejected_count = 0
             
+            # The remaining 60% of progress will be distributed across user interactions
+            remaining_progress = 60
+            progress_per_suggestion = remaining_progress / len(self._merge_suggestions)
+            
             for i, suggestion in enumerate(self._merge_suggestions):
                 # Present the suggestion to the user
+                current_progress = 40 + int(progress_per_suggestion * i)
+                await self._mqtt.update_progress(self.id, "progress", current_progress, f"Processing suggestion {i+1}/{len(self._merge_suggestions)}")
+                
                 user_accepted = await self.present_suggestion_to_user(
                     suggestion, i+1, len(self._merge_suggestions)
                 )
@@ -585,6 +604,8 @@ class IngredientMergerPlugin(Plugin):
                 f"- **{rejected_count}** rejected",
                 ""
             ]
+            
+            await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
             
             # Clear the current suggestion display
             await self._mqtt.log(self.id, "current_suggestion", "All suggestions have been processed.", reset=True)

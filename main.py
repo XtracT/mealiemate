@@ -96,6 +96,15 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                     sensor["id"], 
                     sensor["name"]
                 )
+                
+                # Initialize progress sensors to 0 with blank activity
+                if sensor_id == "progress":
+                    await mqtt_service.setup_mqtt_progress(
+                        plugin.id,
+                        sensor["id"],
+                        sensor["name"]
+                    )
+                    await mqtt_service.update_progress(plugin.id, sensor["id"], 0, "")
 
             # Set up number inputs for plugin configuration
             for number_id, number in entities.get("numbers", {}).items():
@@ -402,6 +411,15 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
         except (asyncio.CancelledError, asyncio.TimeoutError):
             await mqtt_service.info(plugin_id, "Plugin cancelled or timed out during shutdown", category="stop")
             pass
+        
+        # Reset progress sensor to 0 with "Stopped" activity when manually stopped
+        # Check if this plugin has a progress sensor by looking at its MQTT entities
+        plugin_cls = registry.get_plugin(plugin_id)
+        if plugin_cls:
+            plugin = container.inject(plugin_cls)
+            entities = plugin.get_mqtt_entities()
+            if "sensors" in entities and "progress" in entities["sensors"]:
+                await mqtt_service.update_progress(plugin_id, "progress", 0, "Stopped")
     else:
         await mqtt_service.warning(plugin_id, f"Unknown command: {payload}")
 

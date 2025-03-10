@@ -108,7 +108,8 @@ class RecipeTaggerPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "feedback": {"id": "feedback", "name": "Tagging Feedback"}
+                "feedback": {"id": "feedback", "name": "Tagging Feedback"},
+                "progress": {"id": "progress", "name": "Tagging Progress"}
             }
         }
     
@@ -297,6 +298,10 @@ class RecipeTaggerPlugin(Plugin):
     async def execute(self) -> None:
         """Execute the recipe tagger plugin."""
         try:
+            # Set up progress sensor
+            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Tagging Progress")
+            await self._mqtt.update_progress(self.id, "progress", 0, "Starting recipe tagging")
+            
             # Initialize statistics
             stats = {
                 "total_recipes": 0,
@@ -308,18 +313,22 @@ class RecipeTaggerPlugin(Plugin):
             
             # 1. Fetch all recipes
             await self._mqtt.info(self.id, "Fetching recipes from Mealie...", category="start")
+            await self._mqtt.update_progress(self.id, "progress", 5, "Fetching recipes from Mealie")
             recipes = await self._mealie.get_all_recipes()
             if not recipes:
                 logger.warning("No recipes found in Mealie")
                 await self._mqtt.warning(self.id, "No recipes found.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Completed - No recipes found")
                 return
 
             stats["total_recipes"] = len(recipes)
             await self._mqtt.success(self.id, f"Fetched {len(recipes)} recipes.")
+            await self._mqtt.update_progress(self.id, "progress", 10, f"Fetched {len(recipes)} recipes")
             logger.debug(f"Fetched {len(recipes)} recipes from Mealie")
 
             # 2. Preload tags and categories
             await self._mqtt.info(self.id, "Preloading Mealie tags & categories...", category="data")
+            await self._mqtt.update_progress(self.id, "progress", 15, "Preloading tags and categories")
             all_tags = await self._mealie.get_tags()
             all_categories = await self._mealie.get_categories()
 
@@ -327,11 +336,16 @@ class RecipeTaggerPlugin(Plugin):
             tag_mapping = {t["name"].lower(): t for t in all_tags}
             category_mapping = {c["name"].lower(): c for c in all_categories}
             
+            await self._mqtt.update_progress(self.id, "progress", 20, f"Preloaded {len(all_tags)} tags and {len(all_categories)} categories")
             logger.debug(f"Preloaded {len(all_tags)} tags and {len(all_categories)} categories")
 
             # 3. Process each recipe
             for index, recipe in enumerate(recipes):
                 try:
+                    # Calculate percentage (leave 10% for final processing)
+                    percentage = 20 + int(70 * (index / len(recipes)))
+                    await self._mqtt.update_progress(self.id, "progress", percentage, f"Processing recipe {index+1}/{len(recipes)}")
+                    
                     slug = recipe["slug"]
                     logger.debug(f"Processing recipe {index+1}/{len(recipes)}: {slug}")
                     
@@ -369,7 +383,7 @@ class RecipeTaggerPlugin(Plugin):
                     
                     stats["processed"] += 1
                     
-                    # Update progress
+                    # Update progress text
                     if index % 5 == 0 or index == len(recipes) - 1:
                         progress = f"Progress: {index+1}/{len(recipes)} recipes processed"
                         await self._mqtt.progress(self.id, progress)
@@ -388,6 +402,7 @@ class RecipeTaggerPlugin(Plugin):
                 f"Errors {stats['errors']}"
             )
             await self._mqtt.success(self.id, summary)
+            await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
             logger.info(summary)
             
         except Exception as e:

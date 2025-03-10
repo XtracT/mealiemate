@@ -113,7 +113,8 @@ class MealplanFetcherPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "mealplan": {"id": "mealplan", "name": "Formatted Meal Plan"}
+                "mealplan": {"id": "mealplan", "name": "Formatted Meal Plan"},
+                "progress": {"id": "progress", "name": "Fetcher Progress"}
             },
             "numbers": {
                 "num_days": {"id": "num_days", "name": "Fetcher Days", "value": self._num_days}
@@ -446,6 +447,10 @@ class MealplanFetcherPlugin(Plugin):
           3. Generate a rotated PNG image (in memory) of the meal plan.
           4. Send the PNG image via Telegram (if credentials are provided).
         """
+        # Set up progress sensor
+        await self._mqtt.setup_mqtt_progress(self.id, "progress", "Fetcher Progress")
+        await self._mqtt.update_progress(self.id, "progress", 0, "Starting meal plan fetch")
+        
         num_days = self._num_days
         mealie_url = self._mealie_url
 
@@ -456,9 +461,11 @@ class MealplanFetcherPlugin(Plugin):
 
         # Fetch meal plan from Mealie
         await self._mqtt.info(self.id, "Fetching meal plan from Mealie...", category="data")
+        await self._mqtt.update_progress(self.id, "progress", 20, "Fetching meal plan from Mealie")
         mealplan_items = await self._mealie.get_meal_plan(start_date, end_date)
         if not mealplan_items:
             await self._mqtt.warning(self.id, "No meal plan data available.")
+            await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No meal plan data available")
             return
 
         # Build a dictionary: { "YYYY-MM-DD": { "Lunch": recipe, "Dinner": recipe }, ... }
@@ -472,21 +479,27 @@ class MealplanFetcherPlugin(Plugin):
             mealplan[date][meal_type] = recipe
 
         # Generate Markdown table and log via MQTT
+        await self._mqtt.update_progress(self.id, "progress", 40, "Generating markdown table")
         mealplan_markdown = self.generate_markdown_table(mealplan, mealie_url)
         await self._mqtt.log(self.id, "mealplan", mealplan_markdown, category="data")
         await self._mqtt.success(self.id, "Meal plan fetched and logged.")
 
         # Generate the PNG image (in memory)
         await self._mqtt.info(self.id, "Generating meal plan image...", category="progress")
+        await self._mqtt.update_progress(self.id, "progress", 60, "Generating meal plan image")
         image_obj = self.generate_mealplan_png(mealplan)
 
         # Send the image via Telegram
         if self._bot_token and self._bot_chat_id:
             await self._mqtt.info(self.id, "Sending meal plan image to Telegram...", category="network")
+            await self._mqtt.update_progress(self.id, "progress", 80, "Sending meal plan image to Telegram")
             success = await self.send_telegram_image(self._bot_token, self._bot_chat_id, image_obj, "Weekly Meal Plan")
             if success:
                 await self._mqtt.success(self.id, "Meal plan image sent to Telegram successfully.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
             else:
                 await self._mqtt.error(self.id, "Failed to send meal plan image to Telegram.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished with errors")
         else:
             await self._mqtt.warning(self.id, "Telegram credentials not provided. Skipping image send.")
+            await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Telegram send skipped")

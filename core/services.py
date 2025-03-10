@@ -193,6 +193,37 @@ class MqttService(ABC):
     async def success(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
         """Log a success message (sent to Home Assistant)."""
         pass
+        
+    @abstractmethod
+    async def setup_mqtt_progress(self, plugin_id: str, sensor_id: str, name: str) -> bool:
+        """
+        Register an MQTT progress sensor in Home Assistant.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            sensor_id: Unique identifier for this specific sensor
+            name: Human-readable name for the sensor
+            
+        Returns:
+            True if registration was successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def update_progress(self, plugin_id: str, sensor_id: str, percentage: int, activity: str) -> bool:
+        """
+        Update the progress sensor with current percentage and activity.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            sensor_id: Unique identifier for this specific sensor
+            percentage: Progress percentage (0-100)
+            activity: Current activity description
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        pass
 
 
 class MealieApiService(ABC):

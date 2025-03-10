@@ -88,7 +88,8 @@ class ShoppingListGeneratorPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "feedback": {"id": "feedback", "name": "Shopping List Feedback"}
+                "feedback": {"id": "feedback", "name": "Shopping List Feedback"},
+                "progress": {"id": "progress", "name": "Shopping List Progress"}
             },
             "numbers": {
                 "list_length": {"id": "list_length", "name": "Shopping List Days Required", "value": self._list_length}
@@ -310,6 +311,10 @@ class ShoppingListGeneratorPlugin(Plugin):
     async def execute(self) -> None:
         """Execute the shopping list generator plugin."""
         try:
+            # Set up progress sensor
+            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Shopping List Progress")
+            await self._mqtt.update_progress(self.id, "progress", 0, "Starting shopping list generation")
+            
             # Get configuration
             num_days = self._list_length
             list_name = f"Mealplan {datetime.today().strftime('%d %b')}"
@@ -322,10 +327,12 @@ class ShoppingListGeneratorPlugin(Plugin):
             end_date = (datetime.today() + timedelta(days=num_days)).strftime("%Y-%m-%d")
             
             # Fetch meal plan
+            await self._mqtt.update_progress(self.id, "progress", 10, "Fetching meal plan")
             meal_plan = await self._mealie.get_meal_plan(start_date, end_date)
             if not meal_plan:
                 logger.warning("No meal plan data available")
                 await self._mqtt.warning(self.id, "No meal plan data available.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No meal plan data available")
                 return
 
             # Extract meal plan entries with recipes
@@ -337,32 +344,39 @@ class ShoppingListGeneratorPlugin(Plugin):
             if not meal_plan_entries:
                 logger.warning("No recipes found in meal plan")
                 await self._mqtt.warning(self.id, "No recipes found in meal plan.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No recipes found in meal plan")
                 return
                 
             await self._mqtt.info(self.id, f"Found {len(meal_plan_entries)} meal plan entries.", category="data")
             logger.info(f"Found {len(meal_plan_entries)} meal plan entries")
 
             # Process ingredients
+            await self._mqtt.update_progress(self.id, "progress", 20, "Collecting ingredients from recipes")
             raw_ingredients = await self.consolidate_ingredients(meal_plan_entries)
             if not raw_ingredients:
                 logger.warning("No ingredients found in recipes")
                 await self._mqtt.warning(self.id, "No ingredients found in recipes.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No ingredients found in recipes")
                 return
                 
             # Clean up shopping list
+            await self._mqtt.update_progress(self.id, "progress", 40, "Cleaning up shopping list with GPT")
             cleaned_list = await self.clean_up_shopping_list(raw_ingredients)
 
             # Handle dry run mode
             if self._dry_run:
                 logger.info(f"[DRY-RUN] Would create shopping list: {list_name} with {len(cleaned_list)} items")
                 await self._mqtt.info(self.id, f"[DRY-RUN] Would create shopping list: {list_name} with {len(cleaned_list)} items", category="skip")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Dry run mode")
                 return
 
             # Create shopping list in Mealie
+            await self._mqtt.update_progress(self.id, "progress", 70, "Creating shopping list in Mealie")
             success = await self.create_mealie_shopping_list(list_name, cleaned_list)
             if success:
                 await self._mqtt.success(self.id, "Done! Your Mealie shopping list is updated.")
                 logger.info("Shopping list created successfully")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
             
         except Exception as e:
             error_msg = f"Error generating shopping list: {str(e)}"

@@ -132,7 +132,8 @@ class MealPlannerPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "feedback": {"id": "feedback", "name": "Planning Feedback"}
+                "feedback": {"id": "feedback", "name": "Planning Feedback"},
+                "progress": {"id": "progress", "name": "Planning Progress"}
             },
             "numbers": {
                 "mealplan_length": {"id": "mealplan_length", "name": "Mealplan Days Required", "value": self._mealplan_length}
@@ -249,10 +250,15 @@ class MealPlannerPlugin(Plugin):
             num_days = self._mealplan_length
             user_message = self._mealplan_message
 
+            # Set up progress sensor
+            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Planning Progress")
+            await self._mqtt.update_progress(self.id, "progress", 0, "Starting meal planning")
+
             await self._mqtt.info(self.id, "Starting meal planning process...", category="start")
 
             # 1) Fetch all recipes
             await self._mqtt.info(self.id, "Fetching recipes from Mealie...", category="data")
+            await self._mqtt.update_progress(self.id, "progress", 10, "Fetching recipes")
             raw_recipes = await self._mealie.fetch_data("/api/recipes?full=true")
             if not raw_recipes or not isinstance(raw_recipes, dict):
                 error_msg = "Could not fetch recipes from Mealie."
@@ -274,9 +280,11 @@ class MealPlannerPlugin(Plugin):
             
             logger.info(f"Fetched {len(recipes)} recipes from Mealie")
             await self._mqtt.info(self.id, f"Found {len(recipes)} recipes", category="data")
+            await self._mqtt.update_progress(self.id, "progress", 25, f"Found {len(recipes)} recipes")
 
             # 2) Fetch current meal plan
             await self._mqtt.info(self.id, "Fetching current meal plan...", category="data")
+            await self._mqtt.update_progress(self.id, "progress", 35, "Fetching current meal plan")
             # Include past 15 days to avoid repeating recent meals
             start_date = (datetime.today() - timedelta(days=15)).strftime("%Y-%m-%d")
             end_date = (datetime.today() + timedelta(days=num_days)).strftime("%Y-%m-%d")
@@ -301,16 +309,20 @@ class MealPlannerPlugin(Plugin):
 
             # 3) Determine which days need planning
             await self._mqtt.info(self.id, "Determining days that need planning...", category="progress")
+            await self._mqtt.update_progress(self.id, "progress", 45, "Determining days to plan")
             latest_date = max((x["date"] for x in mealplan_items), default=datetime.now().strftime("%Y-%m-%d"))
             days = self.generate_days_list(latest_date, num_days)
             
             if not days:
                 await self._mqtt.success(self.id, "No days need planning")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No days need planning")
                 return
 
             await self._mqtt.info(self.id, f"Planning meals for {len(days)} days", category="progress")
+            await self._mqtt.update_progress(self.id, "progress", 50, f"Planning meals for {len(days)} days")
 
             # 4) Generate plan with GPT
+            await self._mqtt.update_progress(self.id, "progress", 60, "Generating meal plan with GPT")
             plan, feedback = await self.async_generate_plan_and_feedback(recipes, mealplan, days, user_message)
             
             # Log feedback from GPT
@@ -328,9 +340,11 @@ class MealPlannerPlugin(Plugin):
                         await self._mqtt.info(self.id, f"  {meal_type}: {rname}", category="data")
 
             # 5) Update Mealie with the new plan
+            await self._mqtt.update_progress(self.id, "progress", 75, "Updating Mealie with new plan")
             if self._dry_run:
                 await self._mqtt.info(self.id, "DRY RUN: Skipping Mealie updates", category="skip")
                 logger.info("DRY RUN mode - not updating Mealie")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Dry run mode")
             else:
                 await self._mqtt.info(self.id, "\nUpdating Mealie...", category="update")
                 update_count = 0
@@ -383,8 +397,10 @@ class MealPlannerPlugin(Plugin):
                     
                 await self._mqtt.success(self.id, summary)
                 logger.info(summary)
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
                 
         except Exception as e:
             error_msg = f"Error in meal planner: {str(e)}"
             logger.error(error_msg, exc_info=True)
             await self._mqtt.error(self.id, error_msg)
+            await self._mqtt.update_progress(self.id, "progress", 0, "Error occurred")
