@@ -365,6 +365,10 @@ async def log(
         logger.warning(f"Attempted to log to uninitialized sensor: {script_id}_{sensor_id}")
         return False
     
+    # Always reset the buffer for specific sensors to avoid appending
+    if sensor_id in ["feedback", "dough_recipe", "mealplan"]:
+        reset = True
+        
     if reset:
         log_buffers[(script_id, sensor_id)] = ""
 
@@ -399,25 +403,25 @@ async def info(script_id: str, message: str, sensor_id: Optional[str] = None, ca
 
 async def warning(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log a warning message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=WARNING, category=category, log_to_ha=True, log_to_console=True)
+    return await log(script_id, sensor_id or "status", message, level=WARNING, category=category, log_to_ha=False, log_to_console=True)
 
 async def error(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log an error message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=ERROR, category=category, log_to_ha=True, log_to_console=True)
+    return await log(script_id, sensor_id or "status", message, level=ERROR, category=category, log_to_ha=False, log_to_console=True)
 
 async def critical(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
     """Log a critical message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=CRITICAL, category=category, log_to_ha=True, log_to_console=True)
+    return await log(script_id, sensor_id or "status", message, level=CRITICAL, category=category, log_to_ha=False, log_to_console=True)
 
 # Special purpose logging functions
 async def gpt_decision(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
-    """Log a GPT decision (always sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="gpt", log_to_ha=True, log_to_console=False)
+    """Log a GPT decision."""
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="gpt", log_to_ha=False, log_to_console=False)
 
 async def progress(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
     """Log a progress update."""
     return await log(script_id, sensor_id or "status", message, level=INFO, category="progress", log_to_ha=False, log_to_console=True)
 
 async def success(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
-    """Log a success message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=True, log_to_console=False)
+    """Log a success message."""
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=False, log_to_console=False)

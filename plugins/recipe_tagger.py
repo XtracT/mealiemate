@@ -108,7 +108,6 @@ class RecipeTaggerPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "status": {"id": "status", "name": "Tagging Progress"},
                 "feedback": {"id": "feedback", "name": "Tagging Feedback"}
             }
         }

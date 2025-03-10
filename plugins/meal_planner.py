@@ -132,7 +132,6 @@ class MealPlannerPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "status": {"id": "status", "name": "Planning Progress"},
                 "feedback": {"id": "feedback", "name": "Planning Feedback"}
             },
             "numbers": {

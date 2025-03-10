@@ -77,7 +77,6 @@ class IngredientMergerPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "status": {"id": "status", "name": "Merger Progress"},
                 "feedback": {"id": "feedback", "name": "Merger Feedback"}
             }
         }

@@ -113,8 +113,7 @@ class MealplanFetcherPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "mealplan": {"id": "mealplan", "name": "Formatted Meal Plan"},
-                "status": {"id": "status", "name": "Fetcher Status"}
+                "mealplan": {"id": "mealplan", "name": "Formatted Meal Plan"}
             },
             "numbers": {
                 "num_days": {"id": "num_days", "name": "Fetcher Days", "value": self._num_days}

@@ -132,6 +132,7 @@ class MqttServiceImpl(MqttService):
             sensor_id: Unique identifier for the sensor to log to
             message: Message text to log
             reset: If True, clear the existing log buffer before adding this message
+                   Note: For feedback, dough_recipe, and mealplan sensors, reset is always True
             level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
             category: Optional category for emoji selection
             log_to_ha: Whether to log to Home Assistant (set to False for debug messages)
@@ -150,19 +151,19 @@ class MqttServiceImpl(MqttService):
         return await ha_mqtt.info(plugin_id, message, sensor_id, category)
     
     async def warning(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
-        """Log a warning message (sent to Home Assistant)."""
+        """Log a warning message."""
         return await ha_mqtt.warning(plugin_id, message, sensor_id, category)
     
     async def error(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
-        """Log an error message (sent to Home Assistant)."""
+        """Log an error message."""
         return await ha_mqtt.error(plugin_id, message, sensor_id, category)
     
     async def critical(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
-        """Log a critical message (sent to Home Assistant)."""
+        """Log a critical message."""
         return await ha_mqtt.critical(plugin_id, message, sensor_id, category)
     
     async def gpt_decision(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
-        """Log a GPT decision (always sent to Home Assistant)."""
+        """Log a GPT decision."""
         return await ha_mqtt.gpt_decision(plugin_id, message, sensor_id)
     
     async def progress(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
@@ -170,5 +171,5 @@ class MqttServiceImpl(MqttService):
         return await ha_mqtt.progress(plugin_id, message, sensor_id)
     
     async def success(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
-        """Log a success message (sent to Home Assistant)."""
+        """Log a success message."""
         return await ha_mqtt.success(plugin_id, message, sensor_id)

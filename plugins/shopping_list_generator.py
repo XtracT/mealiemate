@@ -88,7 +88,6 @@ class ShoppingListGeneratorPlugin(Plugin):
         return {
             "switch": True,
             "sensors": {
-                "status": {"id": "status", "name": "Shopping List Progress"},
                 "feedback": {"id": "feedback", "name": "Shopping List Feedback"}
             },
             "numbers": {
