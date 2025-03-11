@@ -19,7 +19,6 @@ import os
 import time
 from typing import Dict, List, Set, Any, Tuple, Optional
 
-import aiomqtt
 from core.plugin import Plugin
 from core.services import MqttService, MealieApiService, GptService
 
@@ -260,35 +259,6 @@ class IngredientMergerPlugin(Plugin):
         
         return {"merge_suggestions": final_results}
     
-    async def setup_mqtt_buttons(self) -> None:
-        """Set up the MQTT buttons for user interaction."""
-        # Set up the accept button
-        accept_id = f"{self.id}_accept_button"
-        accept_command_topic = f"homeassistant/button/{accept_id}/command"
-        
-        # Set up the reject button
-        reject_id = f"{self.id}_reject_button"
-        reject_command_topic = f"homeassistant/button/{reject_id}/command"
-        
-        # Subscribe to both command topics in a single client connection
-        async with aiomqtt.Client(os.getenv("MQTT_BROKER"), int(os.getenv("MQTT_PORT", 1883))) as client:
-            await client.subscribe(accept_command_topic)
-            await client.subscribe(reject_command_topic)
-            
-            async for message in client.messages:
-                payload = message.payload.decode()
-                topic = message.topic.value
-                
-                if topic == accept_command_topic and payload == "PRESS":
-                    self._user_accepted = True
-                    self._user_decision_received.set()
-                    break
-                    
-                elif topic == reject_command_topic and payload == "PRESS":
-                    self._user_accepted = False
-                    self._user_decision_received.set()
-                    break
-    
     async def present_suggestion_to_user(self, suggestion: Dict[str, Any], index: int, total: int) -> bool:
         """
         Present a merge suggestion to the user and wait for their decision.
@@ -337,14 +307,9 @@ class IngredientMergerPlugin(Plugin):
         
         # Wait for user decision with a timeout
         try:
-            # Start listening for button presses in a separate task
-            button_task = asyncio.create_task(self.setup_mqtt_buttons())
-            
             # Wait for the user decision or timeout
+            # The main application will handle the button presses and set the event
             await asyncio.wait_for(self._user_decision_received.wait(), timeout=3600)  # 1 hour timeout
-            
-            # Cancel the button task
-            button_task.cancel()
             
             return self._user_accepted
         except asyncio.TimeoutError:
@@ -380,24 +345,9 @@ class IngredientMergerPlugin(Plugin):
     
     async def setup(self) -> None:
         """Set up the plugin's MQTT entities."""
-        # Register the switch
-        await self._mqtt.setup_mqtt_switch(self.id, self.name)
-        
-        # Register the sensors
-        for sensor_id, sensor_config in self.get_mqtt_entities().get("sensors", {}).items():
-            await self._mqtt.setup_mqtt_sensor(
-                self.id, 
-                sensor_config["id"], 
-                sensor_config["name"]
-            )
-        
-        # Register the buttons
-        for button_id, button_config in self.get_mqtt_entities().get("buttons", {}).items():
-            await self._mqtt.setup_mqtt_button(
-                self.id, 
-                button_config["id"], 
-                button_config["name"]
-            )
+        # Skip entity registration - entities are already registered at startup in main.py
+        # This prevents the switch from being reset to OFF after it's turned ON
+        pass
     
     async def execute(self) -> None:
         """Execute the ingredient merger plugin."""
@@ -406,8 +356,7 @@ class IngredientMergerPlugin(Plugin):
             await self.setup()
             await self._mqtt.info(self.id, "Starting ingredient merger analysis...")
             
-            # Set up progress sensor
-            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Merger Progress")
+            # Update progress sensor
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting ingredient merger")
             
             # 1. Fetch all recipes

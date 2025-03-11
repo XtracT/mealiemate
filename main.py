@@ -171,10 +171,16 @@ async def update_switch_state(plugin_id: str, state: str) -> None:
         state: New state ("ON" or "OFF")
     """
     try:
+        # Add a stack trace to see where this function is being called from
+        import traceback
+        stack = traceback.format_stack()
+        caller = stack[-2]  # Get the caller of this function
+        logger.info(f"Updating switch state for {plugin_id} to {state}. Caller: {caller.strip()}")
+        
         async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
             topic = f"{MQTT_DISCOVERY_PREFIX}/switch/{plugin_id}/state"
             await client.publish(topic, payload=state, retain=True)
-            logger.debug(f"Updated switch state for {plugin_id} to {state}")
+            logger.info(f"Updated switch state for {plugin_id} to {state}")
     except Exception as e:
         logger.error(f"Failed to update switch state for {plugin_id}: {str(e)}")
 
@@ -228,8 +234,12 @@ async def execute_plugin(plugin_id: str, registry: PluginRegistry, container: Co
         # Wait for the plugin to complete
         await task
         await mqtt_service.success(plugin_id, "Plugin completed successfully")
+        # Update switch state to OFF only when the plugin completes successfully
+        await update_switch_state(plugin_id, "OFF")
     except asyncio.CancelledError:
         await mqtt_service.info(plugin_id, "Plugin stopped manually", category="stop")
+        # Update switch state to OFF when the plugin is cancelled
+        await update_switch_state(plugin_id, "OFF")
     except Exception as e:
         # Log detailed error information
         logger.error(f"Error in plugin {plugin_id}: {str(e)}", exc_info=True)
@@ -245,10 +255,11 @@ async def execute_plugin(plugin_id: str, registry: PluginRegistry, container: Co
             await mqtt_service.error(plugin_id, f"Error at {file_name}:{line_no} → {e}")
         else:
             await mqtt_service.error(plugin_id, f"Error: {str(e)}")
+        # Update switch state to OFF when the plugin encounters an error
+        await update_switch_state(plugin_id, "OFF")
     finally:
         # Clean up
         running_tasks.pop(plugin_id, None)
-        await update_switch_state(plugin_id, "OFF")
 
 async def mqtt_listener() -> None:
     """
@@ -399,6 +410,22 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
     if "button" in topic and payload == "PRESS":
         logger.info(f"Button press received for {plugin_id}_{entity_id}")
         await mqtt_service.info(plugin_id, f"Button {entity_id} pressed", category="data")
+        
+        # Special handling for ingredient merger plugin buttons
+        if plugin_id == "ingredient_merger" and plugin_id in running_tasks:
+            if entity_id == "accept_button":
+                # Set the user accepted flag and trigger the event
+                if hasattr(plugin, "_user_accepted") and hasattr(plugin, "_user_decision_received"):
+                    plugin._user_accepted = True
+                    plugin._user_decision_received.set()
+                    logger.info(f"Set accept flag for ingredient merger plugin")
+            elif entity_id == "reject_button":
+                # Set the user rejected flag and trigger the event
+                if hasattr(plugin, "_user_accepted") and hasattr(plugin, "_user_decision_received"):
+                    plugin._user_accepted = False
+                    plugin._user_decision_received.set()
+                    logger.info(f"Set reject flag for ingredient merger plugin")
+        
         return
         
     # Handle switch commands (ON/OFF)
@@ -413,6 +440,11 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
             await mqtt_service.info(plugin_id, "Plugin is not running", category="skip")
             return
         await mqtt_service.info(plugin_id, "Stopping plugin", category="stop")
+        
+        # Update switch state to OFF immediately when the user requests to stop the plugin
+        await update_switch_state(plugin_id, "OFF")
+        
+        # Cancel the task
         task = running_tasks.pop(plugin_id)
         task.cancel()
         try:
