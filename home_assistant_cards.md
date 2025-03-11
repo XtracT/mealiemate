@@ -378,7 +378,7 @@ cards:
 ## 5. Shopping List Generator Card
 
 **Purpose:**  
-This card is for the Shopping List Generator plugin. It provides a number input to specify how many days the shopping list should cover and displays feedback messages.
+This card is for the Shopping List Generator plugin. It provides a number input to specify how many days the shopping list should cover and displays feedback messages. To change if the shopping list should be generated from today or tomorrow's meals, double tap or hold the icon. 
 
 **YAML:**
 ```yaml
@@ -394,11 +394,11 @@ cards:
       style:
         hui-horizontal-stack-card $: |
           div#root > :first-child > * {
-            width: 40%;
+            width: 65%;
             flex: auto; 
           }
           div#root > :last-child > * {
-            width: 60%;
+            width: 35%;
             flex: auto; 
           }
     card:
@@ -406,23 +406,43 @@ cards:
       cards:
         - type: custom:mushroom-template-card
           primary: Shopping List Generator
+          secondary: |-
+            {% if is_state('switch.mealiemate_include_today', 'on') %}
+              Including today
+            {% else %}
+              Starting tomorrow
+            {% endif %}
           icon: mdi:cart
           entity: switch.mealiemate_shopping_list_generator
-          icon_color: |-
-            {% if states('sensor.mealiemate_shopping_list_progress') | int == 100 %}
+          icon_color: >-
+            {% if states('sensor.mealiemate_shopping_list_progress') | int ==
+            100 %}
               green
-            {% elif states('sensor.mealiemate_shopping_list_progress') | int > 0 %}
+            {% elif states('sensor.mealiemate_shopping_list_progress') | int > 0
+            %}
               blue
             {% else %}
               grey
             {% endif %}
+          hold_action:
+            action: call-service
+            service: switch.toggle
+            target:
+              entity_id: switch.mealiemate_include_today
+            data: {}
+          double_tap_action:
+            action: call-service
+            service: switch.toggle
+            target:
+              entity_id: switch.mealiemate_include_today
+            data: {}
         - type: custom:mushroom-number-card
           entity: number.mealiemate_shopping_list_days_required
           name: Days
-          icon: mdi:calendar-range
+          icon_type: none
           display_mode: buttons
           secondary_info: none
-          fill: true
+          fill_container: true
           layout: horizontal
   - type: custom:mod-card
     card_mod:

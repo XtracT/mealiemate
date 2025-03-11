@@ -52,6 +52,7 @@ class ShoppingListGeneratorPlugin(Plugin):
         
         # Plugin configuration
         self._list_length = 8
+        self._include_today = False  # Default to not including today (start from tomorrow)
     
     @property
     def id(self) -> str:
@@ -93,6 +94,9 @@ class ShoppingListGeneratorPlugin(Plugin):
             },
             "numbers": {
                 "list_length": {"id": "list_length", "name": "Shopping List Days Required", "value": self._list_length}
+            },
+            "switches": {
+                "include_today": {"id": "include_today", "name": "Include Today", "value": self._include_today}
             }
         }
     
@@ -323,8 +327,13 @@ class ShoppingListGeneratorPlugin(Plugin):
             logger.info(f"Generating shopping list: {list_name} for {num_days} days")
 
             # Define date range for meal plan
-            start_date = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-            end_date = (datetime.today() + timedelta(days=num_days)).strftime("%Y-%m-%d")
+            start_offset = 0 if self._include_today else 1
+            start_date = (datetime.today() + timedelta(days=start_offset)).strftime("%Y-%m-%d")
+            end_date = (datetime.today() + timedelta(days=start_offset + num_days - 1)).strftime("%Y-%m-%d")
+            
+            # Log the date range and include today setting
+            await self._mqtt.info(self.id, f"Include today: {self._include_today}", category="config")
+            await self._mqtt.info(self.id, f"Date range: {start_date} to {end_date}", category="data")
             
             # Fetch meal plan
             await self._mqtt.update_progress(self.id, "progress", 10, "Fetching meal plan")

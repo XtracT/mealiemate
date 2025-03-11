@@ -154,6 +154,19 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                 )
                 logger.debug(f"Registered MQTT button: {button['name']}")
                 
+            # Set up additional switches for plugin configuration
+            for switch_id, switch in entities.get("switches", {}).items():
+                await mqtt_service.setup_mqtt_switch(
+                    f"{plugin.id}_{switch['id']}",
+                    switch["name"]
+                )
+                
+                # Store initial value in persistent configuration
+                if plugin.id not in plugin_configs:
+                    plugin_configs[plugin.id] = {}
+                plugin_configs[plugin.id][f"_{switch_id}"] = switch["value"]
+                logger.debug(f"Registered MQTT switch: {switch['name']} with default value {switch['value']}")
+                
             logger.debug(f"Set up MQTT entities for plugin: {plugin.id}")
         except Exception as e:
             logger.error(f"Error setting up MQTT entities for plugin {plugin_id}: {str(e)}")
@@ -429,40 +442,81 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
         return
         
     # Handle switch commands (ON/OFF)
-    if payload == "ON":
-        if plugin_id in running_tasks:
-            await mqtt_service.info(plugin_id, "Plugin is already running", category="skip")
-            return
-        await mqtt_service.info(plugin_id, "Starting plugin", category="start")
-        asyncio.create_task(execute_plugin(plugin_id, registry, container))
-    elif payload == "OFF":
-        if plugin_id not in running_tasks:
-            await mqtt_service.info(plugin_id, "Plugin is not running", category="skip")
-            return
-        await mqtt_service.info(plugin_id, "Stopping plugin", category="stop")
-        
-        # Update switch state to OFF immediately when the user requests to stop the plugin
-        await update_switch_state(plugin_id, "OFF")
-        
-        # Cancel the task
-        task = running_tasks.pop(plugin_id)
-        task.cancel()
-        try:
-            await asyncio.wait_for(task, timeout=1)
-        except (asyncio.CancelledError, asyncio.TimeoutError):
-            await mqtt_service.info(plugin_id, "Plugin cancelled or timed out during shutdown", category="stop")
-            pass
-        
-        # Reset progress sensor to 0 with "Stopped" activity when manually stopped
-        # Check if this plugin has a progress sensor by looking at its MQTT entities
+    if entity_id == "":  # Main plugin switch
+        if payload == "ON":
+            if plugin_id in running_tasks:
+                await mqtt_service.info(plugin_id, "Plugin is already running", category="skip")
+                return
+            await mqtt_service.info(plugin_id, "Starting plugin", category="start")
+            asyncio.create_task(execute_plugin(plugin_id, registry, container))
+        elif payload == "OFF":
+            if plugin_id not in running_tasks:
+                await mqtt_service.info(plugin_id, "Plugin is not running", category="skip")
+                return
+            await mqtt_service.info(plugin_id, "Stopping plugin", category="stop")
+            
+            # Update switch state to OFF immediately when the user requests to stop the plugin
+            await update_switch_state(plugin_id, "OFF")
+            
+            # Cancel the task
+            task = running_tasks.pop(plugin_id)
+            task.cancel()
+            try:
+                await asyncio.wait_for(task, timeout=1)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                await mqtt_service.info(plugin_id, "Plugin cancelled or timed out during shutdown", category="stop")
+                pass
+            
+            # Reset progress sensor to 0 with "Stopped" activity when manually stopped
+            # Check if this plugin has a progress sensor by looking at its MQTT entities
+            plugin_cls = registry.get_plugin(plugin_id)
+            if plugin_cls:
+                plugin = container.inject(plugin_cls)
+                entities = plugin.get_mqtt_entities()
+                if "sensors" in entities and "progress" in entities["sensors"]:
+                    await mqtt_service.update_progress(plugin_id, "progress", 0, "Stopped")
+    else:  # Additional plugin switches
+        # Check if this is a valid switch for this plugin
         plugin_cls = registry.get_plugin(plugin_id)
         if plugin_cls:
             plugin = container.inject(plugin_cls)
             entities = plugin.get_mqtt_entities()
-            if "sensors" in entities and "progress" in entities["sensors"]:
-                await mqtt_service.update_progress(plugin_id, "progress", 0, "Stopped")
-    else:
-        await mqtt_service.warning(plugin_id, f"Unknown command: {payload}")
+            
+            # Find the switch in the switches dictionary
+            if "switches" in entities:
+                for switch_id, switch in entities["switches"].items():
+                    if switch["id"] == entity_id:
+                        # Update the plugin's instance variable based on entity_id
+                        attr_name = f"_{switch_id}"
+                        if hasattr(plugin, attr_name):
+                            # Convert payload to boolean
+                            value = payload == "ON"
+                            
+                            # Update the instance variable
+                            setattr(plugin, attr_name, value)
+                            
+                            # Store in persistent configuration
+                            if plugin_id not in plugin_configs:
+                                plugin_configs[plugin_id] = {}
+                            plugin_configs[plugin_id][attr_name] = value
+                            
+                            # Update the switch state in Home Assistant
+                            async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+                                topic = f"{MQTT_DISCOVERY_PREFIX}/switch/{plugin_id}_{entity_id}/state"
+                                await client.publish(topic, payload=payload, retain=True)
+                            
+                            await mqtt_service.info(plugin_id, f"Updated switch {entity_id} to {payload}", category="data")
+                            return
+                        else:
+                            logger.warning(f"Plugin {plugin_id} has no attribute {attr_name}")
+                            await mqtt_service.warning(plugin_id, f"Unknown switch attribute: {attr_name}")
+                            return
+                
+                # If we get here, the switch was not found in the switches dictionary
+                await mqtt_service.warning(plugin_id, f"Unknown switch: {entity_id}")
+                return
+        else:
+            await mqtt_service.warning(plugin_id, f"Unknown command: {payload}")
 
 async def mqtt_message_processor(registry: PluginRegistry, container: Container) -> None:
     """
