@@ -456,6 +456,77 @@ async def mqtt_message_processor(registry: PluginRegistry, container: Container)
             await mqtt_service.error("mealiemate", f"Processing error: {str(e)}")
             await asyncio.sleep(1)
 
+async def reset_special_sensors(registry: PluginRegistry, container: Container) -> None:
+    """
+    Reset all special sensors (feedback, dough_recipe, mealplan) for all plugins.
+    
+    Args:
+        registry: The plugin registry containing all discovered plugins
+        container: The dependency injection container
+    """
+    mqtt_service = container.resolve(MqttService)
+    if not mqtt_service:
+        logger.error("MQTT service not found in container")
+        return
+    
+    # Special sensor IDs that should be reset
+    special_sensor_ids = ["feedback", "dough_recipe", "current_suggestion"]  # Excluding "mealplan" as requested
+    
+    # Iterate through all plugins
+    for plugin_id, plugin_cls in registry.get_all_plugins().items():
+        try:
+            # Create plugin instance with dependencies injected
+            plugin = container.inject(plugin_cls)
+            
+            # Get MQTT entity configuration from the plugin
+            entities = plugin.get_mqtt_entities()
+            
+            # Check if the plugin has any special sensors
+            for sensor_id in special_sensor_ids:
+                if "sensors" in entities and sensor_id in entities["sensors"]:
+                    logger.info(f"Resetting {sensor_id} sensor for plugin {plugin_id}")
+                    await mqtt_service.reset_sensor(plugin_id, sensor_id)
+        except Exception as e:
+            logger.error(f"Error resetting sensors for plugin {plugin_id}: {str(e)}")
+
+async def check_midnight_reset(registry: PluginRegistry, container: Container) -> None:
+    """
+    Periodically check if it's midnight and reset special sensors if it is.
+    
+    Args:
+        registry: The plugin registry containing all discovered plugins
+        container: The dependency injection container
+    """
+    mqtt_service = container.resolve(MqttService)
+    if not mqtt_service:
+        logger.error("MQTT service not found in container")
+        return
+    
+    # Track the last day we performed a reset
+    last_reset_day = datetime.now().day
+    
+    while True:
+        try:
+            # Get current time
+            now = datetime.now()
+            
+            # Check if it's a new day (midnight passed)
+            if now.day != last_reset_day:
+                logger.info("Midnight detected, resetting special sensors")
+                await mqtt_service.info("mealiemate", "Midnight detected, resetting special sensors", category="time")
+                
+                # Reset all special sensors
+                await reset_special_sensors(registry, container)
+                
+                # Update the last reset day
+                last_reset_day = now.day
+            
+            # Check every minute
+            await asyncio.sleep(60)
+        except Exception as e:
+            logger.error(f"Error in midnight reset check: {str(e)}")
+            await asyncio.sleep(60)  # Wait a minute before retrying
+
 async def send_status_heartbeat() -> None:
     """
     Periodically send a status heartbeat to Home Assistant to keep the device shown as available.
@@ -530,12 +601,20 @@ async def main() -> None:
         # Set up MQTT entities
         await setup_mqtt_entities(registry, container)
 
+        # Reset all special sensors on startup
+        logger.info("Resetting special sensors on service startup")
+        await mqtt_service.info("mealiemate", "Resetting special sensors on service startup", category="config")
+        await reset_special_sensors(registry, container)
+        
         # Start MQTT listener and message processor
         listener_task = asyncio.create_task(mqtt_listener())
         processor_task = asyncio.create_task(mqtt_message_processor(registry, container))
         
         # Start the status heartbeat task
         heartbeat_task = asyncio.create_task(send_status_heartbeat())
+        
+        # Start the midnight reset task
+        midnight_task = asyncio.create_task(check_midnight_reset(registry, container))
         
         await mqtt_service.success("mealiemate", "MealieMate service started successfully")
 
@@ -569,10 +648,10 @@ async def main() -> None:
             logger.error(f"Error publishing offline status: {str(e)}")
 
         # Cancel and wait for background tasks
-        for t in (listener_task, processor_task, heartbeat_task):
+        for t in (listener_task, processor_task, heartbeat_task, midnight_task):
             t.cancel()
         
-        await asyncio.gather(listener_task, processor_task, heartbeat_task, return_exceptions=True)
+        await asyncio.gather(listener_task, processor_task, heartbeat_task, midnight_task, return_exceptions=True)
         
         await mqtt_service.success("mealiemate", "MealieMate service shutdown complete")
         

@@ -202,6 +202,19 @@ class MqttServiceImpl(MqttService):
         """
         return await ha_mqtt.setup_mqtt_progress(plugin_id, sensor_id, name)
     
+    async def reset_sensor(self, plugin_id: str, sensor_id: str) -> bool:
+        """
+        Reset a sensor by writing an empty string to it.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            sensor_id: Unique identifier for the sensor to reset
+            
+        Returns:
+            True if reset was successful, False otherwise
+        """
+        return await ha_mqtt.reset_sensor(plugin_id, sensor_id)
+    
     async def update_progress(self, plugin_id: str, sensor_id: str, percentage: int, activity: str) -> bool:
         """
         Update the progress sensor with current percentage and activity.

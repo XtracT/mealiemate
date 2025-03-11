@@ -210,6 +210,20 @@ class MqttService(ABC):
         pass
 
     @abstractmethod
+    async def reset_sensor(self, plugin_id: str, sensor_id: str) -> bool:
+        """
+        Reset a sensor by writing an empty string to it.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            sensor_id: Unique identifier for the sensor to reset
+            
+        Returns:
+            True if reset was successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
     async def update_progress(self, plugin_id: str, sensor_id: str, percentage: int, activity: str) -> bool:
         """
         Update the progress sensor with current percentage and activity.

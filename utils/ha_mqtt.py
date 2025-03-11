@@ -400,7 +400,7 @@ async def log(
         return False
     
     # Always reset the buffer for specific sensors to avoid appending
-    if sensor_id in ["feedback", "dough_recipe", "mealplan"]:
+    if sensor_id in ["feedback", "dough_recipe", "current_suggestion"]:  # Excluding "mealplan" as requested
         reset = True
         
     if reset:
@@ -497,6 +497,45 @@ async def setup_mqtt_progress(script_id: str, sensor_id: str, sensor_name: str) 
             return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT progress sensor '{sensor_name}': {str(e)}")
+        return False
+
+async def reset_sensor(script_id: str, sensor_id: str) -> bool:
+    """
+    Reset a sensor by writing an empty string to it.
+    
+    Args:
+        script_id: Unique identifier for the script
+        sensor_id: Unique identifier for the sensor to reset
+        
+    Returns:
+        True if reset was successful, False otherwise
+    """
+    logger.info(f"Resetting sensor: {script_id}_{sensor_id}")
+    
+    # Check if sensor is initialized
+    if (script_id, sensor_id) not in log_buffers:
+        logger.warning(f"Attempted to reset uninitialized sensor: {script_id}_{sensor_id}")
+        return False
+    
+    # Reset the buffer directly without adding any emoji
+    log_buffers[(script_id, sensor_id)] = ""
+    
+    state_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{script_id}_{sensor_id}/state"
+    attributes_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{script_id}_{sensor_id}/attributes"
+    
+    state_value = datetime.now(timezone.utc).isoformat()
+    
+    try:
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(state_topic, state_value, retain=True)
+            await client.publish(
+                attributes_topic,
+                json.dumps({"full_text": ""}),
+                retain=True
+            )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to reset sensor {script_id}_{sensor_id}: {str(e)}")
         return False
 
 async def update_progress(script_id: str, sensor_id: str, percentage: int, activity: str) -> bool:
