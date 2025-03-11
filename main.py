@@ -35,15 +35,24 @@ from services.mqtt_service import MqttServiceImpl
 from services.mealie_api_service import MealieApiServiceImpl
 from services.gpt_service import GptServiceImpl
 
+# Load environment variables
+load_dotenv()
+
 # Configure logging
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level_map = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL
+}
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level_map.get(LOG_LEVEL, logging.INFO),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Load environment variables
-load_dotenv()
+logger.info(f"Logging level set to {LOG_LEVEL}")
 
 # MQTT configuration
 MQTT_BROKER = os.getenv("MQTT_BROKER")
@@ -119,7 +128,7 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                 if plugin.id not in plugin_configs:
                     plugin_configs[plugin.id] = {}
                 plugin_configs[plugin.id][f"_{number_id}"] = number["value"]
-                logger.info(f"Stored initial number config for {plugin.id}: _{number_id}={number['value']}")
+                logger.debug(f"Stored initial number config for {plugin.id}: _{number_id}={number['value']}")
 
             # Set up text inputs for plugin configuration
             for text_id, text in entities.get("texts", {}).items():
@@ -134,7 +143,7 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                 if plugin.id not in plugin_configs:
                     plugin_configs[plugin.id] = {}
                 plugin_configs[plugin.id][f"_{text_id}"] = text["text"]
-                logger.info(f"Stored initial text config for {plugin.id}: _{text_id}={text['text']}")
+                logger.debug(f"Stored initial text config for {plugin.id}: _{text_id}={text['text']}")
                 
             # Set up buttons for plugin interaction
             for button_id, button in entities.get("buttons", {}).items():
@@ -143,9 +152,9 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
                     button["id"],
                     button["name"]
                 )
-                logger.info(f"Registered MQTT button: {button['name']}")
+                logger.debug(f"Registered MQTT button: {button['name']}")
                 
-            logger.info(f"Set up MQTT entities for plugin: {plugin.id}")
+            logger.debug(f"Set up MQTT entities for plugin: {plugin.id}")
         except Exception as e:
             logger.error(f"Error setting up MQTT entities for plugin {plugin_id}: {str(e)}")
 
@@ -199,11 +208,11 @@ async def execute_plugin(plugin_id: str, registry: PluginRegistry, container: Co
         
         # Apply any stored configuration values to the plugin
         if plugin_id in plugin_configs:
-            logger.info(f"Applying stored configuration for {plugin_id}: {plugin_configs[plugin_id]}")
+            logger.debug(f"Applying stored configuration for {plugin_id}: {plugin_configs[plugin_id]}")
             for attr_name, value in plugin_configs[plugin_id].items():
                 if hasattr(plugin, attr_name):
                     setattr(plugin, attr_name, value)
-                    logger.info(f"Applied stored config {attr_name}={value} to {plugin_id}")
+                    logger.debug(f"Applied stored config {attr_name}={value} to {plugin_id}")
                 else:
                     logger.warning(f"Plugin {plugin_id} has no attribute {attr_name}")
     except Exception as e:
@@ -257,14 +266,14 @@ async def mqtt_listener() -> None:
         async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT, will=will_msg, timeout=5) as client:
             # Publish initial online status
             await client.publish(state_topic, payload="ON", retain=True)
-            logger.info("MQTT listener started, service status set to ON")
+            logger.info("MQTT service online")
 
             # Subscribe to control topics
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/switch/+/set")
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/number/+/set")
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/text/+/set")
             await client.subscribe(f"{MQTT_DISCOVERY_PREFIX}/button/+/command")
-            logger.info("Subscribed to MQTT control topics")
+            logger.debug("Subscribed to MQTT control topics")
 
             # Process incoming messages
             async for message in client.messages:
@@ -484,7 +493,7 @@ async def reset_special_sensors(registry: PluginRegistry, container: Container) 
             # Check if the plugin has any special sensors
             for sensor_id in special_sensor_ids:
                 if "sensors" in entities and sensor_id in entities["sensors"]:
-                    logger.info(f"Resetting {sensor_id} sensor for plugin {plugin_id}")
+                    logger.debug(f"Resetting {sensor_id} sensor for plugin {plugin_id}")
                     await mqtt_service.reset_sensor(plugin_id, sensor_id)
         except Exception as e:
             logger.error(f"Error resetting sensors for plugin {plugin_id}: {str(e)}")
@@ -602,7 +611,7 @@ async def main() -> None:
         await setup_mqtt_entities(registry, container)
 
         # Reset all special sensors on startup
-        logger.info("Resetting special sensors on service startup")
+        logger.debug("Resetting special sensors on service startup")
         await mqtt_service.info("mealiemate", "Resetting special sensors on service startup", category="config")
         await reset_special_sensors(registry, container)
         

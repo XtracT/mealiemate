@@ -42,7 +42,7 @@ class PluginRegistry:
             logger.warning(f"Plugin with ID '{plugin_id}' is already registered. Overwriting.")
             
         self._plugins[plugin_id] = plugin_cls
-        logger.info(f"Registered plugin: {plugin_id} ({plugin_cls.__name__})")
+        logger.debug(f"Registered plugin: {plugin_id} ({plugin_cls.__name__})")
     
     def get_plugin(self, plugin_id: str) -> Optional[Type[Plugin]]:
         """
