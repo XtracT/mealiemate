@@ -93,7 +93,16 @@ class ShoppingListGeneratorPlugin(Plugin):
                 "progress": {"id": "progress", "name": "Shopping List Progress"}
             },
             "numbers": {
-                "list_length": {"id": "list_length", "name": "Shopping List Days Required", "value": self._list_length}
+                "list_length": {
+                    "id": "list_length",
+                    "name": "Shopping List Days Required",
+                    "value": self._list_length,
+                    "type": "int",
+                    "min": 1,
+                    "max": 30,
+                    "step": 1,
+                    "unit": "days"
+                }
             },
             "switches": {
                 "include_today": {"id": "include_today", "name": "Include Today", "value": self._include_today}

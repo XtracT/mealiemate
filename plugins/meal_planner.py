@@ -136,7 +136,16 @@ class MealPlannerPlugin(Plugin):
                 "progress": {"id": "progress", "name": "Planning Progress"}
             },
             "numbers": {
-                "mealplan_length": {"id": "mealplan_length", "name": "Mealplan Days Required", "value": self._mealplan_length}
+                "mealplan_length": {
+                    "id": "mealplan_length",
+                    "name": "Mealplan Days Required",
+                    "value": self._mealplan_length,
+                    "type": "int",
+                    "min": 1,
+                    "max": 30,
+                    "step": 1,
+                    "unit": "days"
+                }
             },
             "texts": {
                 "mealplan_message": {"id": "mealplan_message", "name": "Mealplan User Input", "text": self._mealplan_message}

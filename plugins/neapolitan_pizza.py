@@ -91,13 +91,76 @@ class NeapolitanPizzaPlugin(Plugin):
                 "progress": {"id": "progress", "name": "Pizza Calculation Progress"}
             },
             "numbers": {
-                "number_of_balls": {"id": "number_of_balls", "name": "Number of Balls", "value": self._number_of_balls},
-                "ball_weight": {"id": "ball_weight", "name": "Ball Weight (g)", "value": self._ball_weight},
-                "hydration": {"id": "hydration", "name": "Hydration (%)", "value": self._hydration},
-                "salt_percent": {"id": "salt_percent", "name": "Salt (% of flour)", "value": self._salt_percent},
-                "ambient_temp": {"id": "ambient_temp", "name": "Ambient Temperature (°C)", "value": self._ambient_temp},
-                "fridge_temp": {"id": "fridge_temp", "name": "Fridge Temperature (°C)", "value": self._fridge_temp},
-                "total_time": {"id": "total_time", "name": "Total Proof Time (hours)", "value": self._total_time}
+                "number_of_balls": {
+                    "id": "number_of_balls",
+                    "name": "Number of Balls",
+                    "value": self._number_of_balls,
+                    "type": "int",
+                    "min": 1,
+                    "max": 20,
+                    "step": 1,
+                    "unit": "ball(s)"
+                },
+                "ball_weight": {
+                    "id": "ball_weight",
+                    "name": "Ball Weight (g)",
+                    "value": self._ball_weight,
+                    "type": "int",
+                    "min": 100,
+                    "max": 1000,
+                    "step": 5,
+                    "unit": "g"
+                },
+                "hydration": {
+                    "id": "hydration",
+                    "name": "Hydration (%)",
+                    "value": self._hydration,
+                    "type": "int",
+                    "min": 50,
+                    "max": 80,
+                    "step": 1,
+                    "unit": "%"
+                },
+                "salt_percent": {
+                    "id": "salt_percent",
+                    "name": "Salt (% of flour)",
+                    "value": self._salt_percent,
+                    "type": "float",
+                    "min": 0.0,
+                    "max": 6.0,
+                    "step": 0.1,
+                    "unit": "%"
+                },
+                "ambient_temp": {
+                    "id": "ambient_temp",
+                    "name": "Ambient Temperature (°C)",
+                    "value": self._ambient_temp,
+                    "type": "int",
+                    "min": 0,
+                    "max": 40,
+                    "step": 1,
+                    "unit": "°C"
+                },
+                "fridge_temp": {
+                    "id": "fridge_temp",
+                    "name": "Fridge Temperature (°C)",
+                    "value": self._fridge_temp,
+                    "type": "int",
+                    "min": 0,
+                    "max": 10,
+                    "step": 1,
+                    "unit": "°C"
+                },
+                "total_time": {
+                    "id": "total_time",
+                    "name": "Total Proof Time (hours)",
+                    "value": self._total_time,
+                    "type": "int",
+                    "min": 1,
+                    "max": 48,
+                    "step": 1,
+                    "unit": "h"
+                }
             }
         }
     

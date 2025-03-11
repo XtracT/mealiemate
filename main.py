@@ -117,11 +117,21 @@ async def setup_mqtt_entities(registry: PluginRegistry, container: Container) ->
 
             # Set up number inputs for plugin configuration
             for number_id, number in entities.get("numbers", {}).items():
+                # Check if the number entity has type, min, max, step, and unit
+                min_value = number.get("min", 1)
+                max_value = number.get("max", 1000)
+                step = number.get("step", 1)
+                unit = number.get("unit", "")
+                
                 await mqtt_service.setup_mqtt_number(
                     plugin.id, 
                     number["id"], 
                     number["name"],
-                    number["value"]
+                    number["value"],
+                    min_value,
+                    max_value,
+                    step,
+                    unit
                 )
                 
                 # Store initial value in persistent configuration
@@ -367,7 +377,20 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
     if "number" in topic:
         try:
             # Update the plugin's configuration
-            value = int(payload)
+            # Check if this is a float type number
+            entities = plugin.get_mqtt_entities()
+            is_float = False
+            if "numbers" in entities:
+                for number_id, number in entities["numbers"].items():
+                    if number["id"] == entity_id and number.get("type") == "float":
+                        is_float = True
+                        break
+            
+            # Parse as float or int based on the type
+            if is_float:
+                value = float(payload)
+            else:
+                value = int(payload)
             
             # Update the plugin's instance variable based on entity_id
             # This assumes the plugin has instance variables named _entity_id
