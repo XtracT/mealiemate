@@ -210,7 +210,7 @@ class IngredientMergerPlugin(Plugin):
             # Call GPT
             messages = [{"role": "user", "content": prompt}]
             logger.debug(f"Sending batch {batch_num} to GPT")
-            result = await self._gpt.gpt_json_chat(messages, model=self._model_name, temperature=self._temperature)
+            result = await self._gpt.gpt_json_chat(messages, temperature=self._temperature)
             
             # Extract merge suggestions
             merge_suggestions = result.get("merge_suggestions", [])

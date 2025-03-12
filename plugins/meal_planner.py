@@ -188,7 +188,7 @@ class MealPlannerPlugin(Plugin):
         ]
 
         # Call GPT
-        result = await self._gpt.gpt_json_chat(messages, model=self._model_name, temperature=self._temperature)
+        result = await self._gpt.gpt_json_chat(messages, temperature=self._temperature)
         
         # Process results
         meal_plan_obj = result.get("mealPlan", {})

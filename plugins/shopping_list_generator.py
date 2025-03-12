@@ -236,7 +236,7 @@ class ShoppingListGeneratorPlugin(Plugin):
 
         # Call GPT
         messages = [{"role": "user", "content": json.dumps(prompt_content)}]
-        result = await self._gpt.gpt_json_chat(messages, model=self._model_name, temperature=0)
+        result = await self._gpt.gpt_json_chat(messages, temperature=self._temperature)
         
         # Process results
         cleaned_list = result.get("shopping_list", [])

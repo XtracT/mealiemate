@@ -92,6 +92,9 @@ services:
       MEALIE_URL: "http://192.168.XX.XX:XXXX"
       MEALIE_TOKEN: "insert_here"
       OPENAI_API_KEY: "insert_here"
+      USE_OPENROUTER: "false"
+      OPENROUTER_API_KEY: "insert_here"
+      OPENROUTER_MODEL: "deepseek/deepseek-r1-zero:free"
       HA_URL: "http://192.168.XX.XX:8123"
       HA_TOKEN: "insert_here"
       MQTT_BROKER: "192.168.XX.XX"
@@ -108,7 +111,13 @@ services:
 - **MEALIE_TOKEN**
     - Your Mealie API token.
 - **OPENAI_API_KEY**
-    - Your OpenAI API key for GPT calls.
+    - Your OpenAI API key for GPT calls (required if not using OpenRouter). If you want to use OpenRouter, leave this empty.
+- **USE_OPENROUTER** (optional)
+    - Set to "true" to use OpenRouter instead of OpenAI. Defaults to "false".
+- **OPENROUTER_API_KEY**
+    - Your OpenRouter API key. Required when using OpenRouter.
+- **OPENROUTER_MODEL** (optional)
+    - The model to use with OpenRouter. Defaults to "deepseek/deepseek-r1-zero:free". See https://openrouter.ai/docs#models for a list of available models.
 - **HA_URL**
     - Base URL for Home Assistant, if you're calling any of its services.
 - **HA_TOKEN**

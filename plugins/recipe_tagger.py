@@ -155,7 +155,7 @@ class RecipeTaggerPlugin(Plugin):
         # Call GPT
         messages = [{"role": "user", "content": prompt}]
         logger.debug(f"Classifying recipe: {name}")
-        result = await self._gpt.gpt_json_chat(messages, model=self._model_name, temperature=self._temperature)
+        result = await self._gpt.gpt_json_chat(messages, temperature=self._temperature)
 
         # Extract and validate tags
         raw_tags = result.get("tags", [])
