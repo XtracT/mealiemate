@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import time
+import math
 from typing import Dict, List, Set, Any, Tuple, Optional
 
 from core.plugin import Plugin
@@ -44,7 +45,10 @@ class IngredientMergerPlugin(Plugin):
         # Configuration
         self._model_name = "gpt-4o"
         self._temperature = 0.1
-        self._batch_size = 50  # Number of ingredients to analyze in one GPT call
+        self._batch_size = 1000  # Increased batch size to handle more ingredients in one GPT call
+        self._token_limit = 100000  # Conservative token limit for GPT-4o (actual limit is 128k)
+        self._estimated_tokens_per_ingredient = 10  # Estimated tokens per ingredient name including formatting
+        self._base_prompt_tokens = 1500  # Estimated tokens for the base prompt without ingredients
         
         # State for user interaction
         self._current_suggestion_index = 0
@@ -145,16 +149,36 @@ class IngredientMergerPlugin(Plugin):
                 ingredient_ids_by_name[name] = ingredient["id"]
         
         unique_ingredient_names = list(all_ingredient_names)
-        logger.info(f"Found {len(unique_ingredient_names)} unique ingredients across all recipes")
-        await self._mqtt.info(self.id, f"Found {len(unique_ingredient_names)} unique ingredients across all recipes")
+        total_ingredients = len(unique_ingredient_names)
+        logger.info(f"Found {total_ingredients} unique ingredients across all recipes")
+        await self._mqtt.info(self.id, f"Found {total_ingredients} unique ingredients across all recipes")
+        
+        # Calculate dynamic batch size based on token estimation
+        estimated_total_tokens = self._base_prompt_tokens + (total_ingredients * self._estimated_tokens_per_ingredient)
+        
+        # If we can process all ingredients in one batch, do so
+        if estimated_total_tokens <= self._token_limit:
+            dynamic_batch_size = total_ingredients
+            await self._mqtt.info(
+                self.id, 
+                f"Processing all {total_ingredients} ingredients in a single batch (estimated {estimated_total_tokens} tokens)"
+            )
+        else:
+            # Calculate how many ingredients we can fit in one batch
+            max_ingredients_per_batch = (self._token_limit - self._base_prompt_tokens) // self._estimated_tokens_per_ingredient
+            dynamic_batch_size = min(max_ingredients_per_batch, self._batch_size)
+            await self._mqtt.info(
+                self.id, 
+                f"Using batch size of {dynamic_batch_size} ingredients (token limit constraints)"
+            )
         
         # Process ingredients in batches to avoid token limits
         results = []
-        total_batches = (len(unique_ingredient_names) + self._batch_size - 1) // self._batch_size
+        total_batches = math.ceil(total_ingredients / dynamic_batch_size)
         
-        for i in range(0, len(unique_ingredient_names), self._batch_size):
-            batch = unique_ingredient_names[i:i+self._batch_size]
-            batch_num = i // self._batch_size + 1
+        for i in range(0, total_ingredients, dynamic_batch_size):
+            batch = unique_ingredient_names[i:i+dynamic_batch_size]
+            batch_num = i // dynamic_batch_size + 1
             
             await self._mqtt.info(
                 self.id, 
