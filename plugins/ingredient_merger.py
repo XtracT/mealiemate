@@ -275,6 +275,10 @@ class IngredientMergerPlugin(Plugin):
         self._user_decision_received.clear()
         self._user_accepted = False
         
+        # Log the object ID to help with debugging
+        logger.debug(f"Waiting for user decision on object ID: {id(self)}")
+        await self._mqtt.debug(self.id, f"Waiting for user decision on object ID: {id(self)}")
+        
         # Extract suggestion details
         ingredients = suggestion.get("ingredients", [])
         recommended = suggestion.get("recommended_name", "")
