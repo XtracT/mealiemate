@@ -447,8 +447,7 @@ class MealplanFetcherPlugin(Plugin):
           3. Generate a rotated PNG image (in memory) of the meal plan.
           4. Send the PNG image via Telegram (if credentials are provided).
         """
-        # Set up progress sensor
-        await self._mqtt.setup_mqtt_progress(self.id, "progress", "Fetcher Progress")
+        # Update progress
         await self._mqtt.update_progress(self.id, "progress", 0, "Starting meal plan fetch")
         
         num_days = self._num_days

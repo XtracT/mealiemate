@@ -352,8 +352,7 @@ class NeapolitanPizzaPlugin(Plugin):
         logger.info("Starting Neapolitan pizza dough calculation")
         
         try:
-            # Set up progress sensor
-            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Pizza Calculation Progress")
+            # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting pizza dough calculation")
             
             # 1) Read user inputs

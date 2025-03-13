@@ -529,8 +529,7 @@ class ShoppingListGeneratorPlugin(Plugin):
             await self._mqtt.log(self.id, "feedback", "", reset=True)
             await self._mqtt.log(self.id, "current_batch", "", reset=True)
 
-            # Set up progress sensor
-            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Shopping List Progress")
+            # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting shopping list generation")
 
             # Get configuration

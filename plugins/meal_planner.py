@@ -259,8 +259,7 @@ class MealPlannerPlugin(Plugin):
             num_days = self._mealplan_length
             user_message = self._mealplan_message
 
-            # Set up progress sensor
-            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Planning Progress")
+            # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting meal planning")
 
             await self._mqtt.info(self.id, "Starting meal planning process...", category="start")

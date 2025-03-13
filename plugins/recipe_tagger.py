@@ -298,8 +298,7 @@ class RecipeTaggerPlugin(Plugin):
     async def execute(self) -> None:
         """Execute the recipe tagger plugin."""
         try:
-            # Set up progress sensor
-            await self._mqtt.setup_mqtt_progress(self.id, "progress", "Tagging Progress")
+            # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting recipe tagging")
             
             # Initialize statistics

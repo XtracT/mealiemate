@@ -12,6 +12,7 @@ This module implements the MqttMessageHandler class, which is responsible for:
 """
 
 import logging
+import asyncio
 from typing import Dict, Any, Optional
 
 from core.plugin_registry import PluginRegistry
@@ -242,33 +243,23 @@ class MqttMessageHandler:
         if running_plugin:
             logger.debug(f"Found running instance of {plugin_id}, object ID: {id(running_plugin)}")
 
-            # Handle ingredient merger plugin buttons
-            if plugin_id == "ingredient_merger":
-                if entity_id == "accept_button":
-                    # Set the user accepted flag and trigger the event on the RUNNING instance
-                    if hasattr(running_plugin, "_user_accepted") and hasattr(running_plugin, "_user_decision_received"):
-                        running_plugin._user_accepted = True
-                        running_plugin._user_decision_received.set()
-                        logger.debug(f"Set accept flag for ingredient merger plugin (running instance)")
-                    else:
-                        logger.warning(f"Running plugin instance doesn't have expected attributes")
-                elif entity_id == "reject_button":
-                    # Set the user rejected flag and trigger the event on the RUNNING instance
-                    if hasattr(running_plugin, "_user_accepted") and hasattr(running_plugin, "_user_decision_received"):
-                        running_plugin._user_accepted = False
-                        running_plugin._user_decision_received.set()
-                        logger.debug(f"Set reject flag for ingredient merger plugin (running instance)")
-                    else:
-                        logger.warning(f"Running plugin instance doesn't have expected attributes")
-
-            # Handle shopping list generator plugin buttons
-            elif plugin_id == "shopping_list_generator":
-                if entity_id == "continue_to_next_batch":
-                    # Trigger the event on the RUNNING instance to continue to next batch
-                    if hasattr(running_plugin, "_user_decision_received"):
-                        running_plugin._user_decision_received.set()
-                        logger.debug(f"Triggered continue button for shopping list generator plugin (running instance)")
-                    else:
-                        logger.warning(f"Running plugin instance doesn't have expected attributes")
+            # Generic approach to handle button events
+            # Look for event attributes based on button entity_id
+            event_attr = "_user_decision_received"
+            
+            if hasattr(running_plugin, event_attr) and isinstance(getattr(running_plugin, event_attr), asyncio.Event):
+                # Handle specific button types
+                if entity_id == "accept_button" or entity_id == "reject_button":
+                    # For accept/reject buttons, also set the acceptance flag
+                    if hasattr(running_plugin, "_user_accepted"):
+                        running_plugin._user_accepted = (entity_id == "accept_button")
+                        logger.debug(f"Set user acceptance to {running_plugin._user_accepted} for {plugin_id}")
+                
+                # Trigger the event
+                event = getattr(running_plugin, event_attr)
+                event.set()
+                logger.debug(f"Triggered event {event_attr} for {plugin_id} button {entity_id}")
+            else:
+                logger.warning(f"Running plugin instance doesn't have expected event attribute: {event_attr}")
         else:
             logger.warning(f"Button press received for {plugin_id}_{entity_id}, but plugin is not running")

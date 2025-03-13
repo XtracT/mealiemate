@@ -371,20 +371,13 @@ class IngredientMergerPlugin(Plugin):
             logger.error(f"Error updating recipe '{recipe_slug}': {str(e)}", exc_info=True)
             return False
     
-    async def setup(self) -> None:
-        """Set up the plugin's MQTT entities."""
-        # Skip entity registration - entities are already registered at startup in main.py
-        # This prevents the switch from being reset to OFF after it's turned ON
-        pass
-    
     async def execute(self) -> None:
         """Execute the ingredient merger plugin."""
         try:
             # Initialize
-            await self.setup()
             await self._mqtt.info(self.id, "Starting ingredient merger analysis...")
             
-            # Update progress sensor
+            # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting ingredient merger")
             
             # 1. Fetch all recipes

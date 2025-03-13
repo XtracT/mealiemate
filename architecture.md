@@ -322,11 +322,11 @@ class MyNewPlugin(Plugin):
     async def execute(self) -> None:
         """Execute the plugin's main functionality."""
         try:
-            # Initialize progress
-            await self._mqtt.update_progress(self.id, "progress", 0, "Starting")
-            
-            # Log some information
+            # Log information
             await self._mqtt.info(self.id, f"Starting with configuration: {self._some_config}", category="start")
+            
+            # Initialize progress - no need to call setup_mqtt_progress, the SystemService handles this
+            await self._mqtt.update_progress(self.id, "progress", 0, "Starting")
             
             # Implement your plugin logic here
             # ...
@@ -347,6 +347,14 @@ class MyNewPlugin(Plugin):
             await self._mqtt.error(self.id, f"Error: {str(e)}")
             await self._mqtt.update_progress(self.id, "progress", 100, "Error")
 ```
+
+### 6.2. Important Notes for Plugin Development
+
+1. **Progress Sensor Setup**: Do not call `setup_mqtt_progress` in your plugin's `execute` method. The SystemService now handles setting up all MQTT entities, including progress sensors.
+
+2. **Button Event Handling**: The MqttMessageHandler uses a generic approach for handling button events. If your plugin needs to handle button events, use the `_user_decision_received` event pattern as shown in the ingredient_merger.py and shopping_list_generator.py plugins.
+
+3. **No Setup Method Needed**: Plugins no longer need a `setup` method to register MQTT entities. The SystemService handles this automatically.
 
 ## 7. Testing
 
