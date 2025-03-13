@@ -136,7 +136,8 @@ class MqttServiceImpl(MqttService):
         reset: bool = False, 
         level: int = 20,  # INFO
         category: Optional[str] = None,
-        log_to_ha: bool = True
+        log_to_ha: bool = True,
+        extra_attributes: Optional[Dict[str, str]] = None
     ) -> bool:
         """
         Enhanced log function that handles both console and Home Assistant logging.
@@ -150,43 +151,44 @@ class MqttServiceImpl(MqttService):
             level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
             category: Optional category for emoji selection
             log_to_ha: Whether to log to Home Assistant (set to False for debug messages)
+            extra_attributes: Optional dictionary of additional attributes to include
             
         Returns:
             True if logging was successful, False otherwise
         """
-        return await ha_mqtt.log(plugin_id, sensor_id, message, reset, level, category, log_to_ha)
+        return await ha_mqtt.log(plugin_id, sensor_id, message, reset, level, category, log_to_ha, extra_attributes=extra_attributes)
     
-    async def debug(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def debug(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a debug message (not sent to Home Assistant)."""
-        return await ha_mqtt.debug(plugin_id, message, sensor_id, category)
+        return await ha_mqtt.debug(plugin_id, message, sensor_id, category, extra_attributes)
     
-    async def info(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def info(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log an info message."""
-        return await ha_mqtt.info(plugin_id, message, sensor_id, category)
+        return await ha_mqtt.info(plugin_id, message, sensor_id, category, extra_attributes)
     
-    async def warning(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def warning(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a warning message."""
-        return await ha_mqtt.warning(plugin_id, message, sensor_id, category)
+        return await ha_mqtt.warning(plugin_id, message, sensor_id, category, extra_attributes)
     
-    async def error(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def error(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log an error message."""
-        return await ha_mqtt.error(plugin_id, message, sensor_id, category)
+        return await ha_mqtt.error(plugin_id, message, sensor_id, category, extra_attributes)
     
-    async def critical(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def critical(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a critical message."""
-        return await ha_mqtt.critical(plugin_id, message, sensor_id, category)
+        return await ha_mqtt.critical(plugin_id, message, sensor_id, category, extra_attributes)
     
-    async def gpt_decision(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    async def gpt_decision(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a GPT decision."""
-        return await ha_mqtt.gpt_decision(plugin_id, message, sensor_id)
+        return await ha_mqtt.gpt_decision(plugin_id, message, sensor_id, extra_attributes)
     
-    async def progress(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    async def progress(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a progress update."""
-        return await ha_mqtt.progress(plugin_id, message, sensor_id)
+        return await ha_mqtt.progress(plugin_id, message, sensor_id, extra_attributes)
     
-    async def success(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    async def success(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a success message."""
-        return await ha_mqtt.success(plugin_id, message, sensor_id)
+        return await ha_mqtt.success(plugin_id, message, sensor_id, extra_attributes)
         
     async def setup_mqtt_progress(self, plugin_id: str, sensor_id: str, name: str) -> bool:
         """
@@ -229,3 +231,16 @@ class MqttServiceImpl(MqttService):
             True if update was successful, False otherwise
         """
         return await ha_mqtt.update_progress(plugin_id, sensor_id, percentage, activity)
+        
+    async def set_switch_state(self, switch_id: str, state: str) -> bool:
+        """
+        Set the state of a switch in Home Assistant.
+        
+        Args:
+            switch_id: ID of the switch (e.g. plugin_id_switch_id)
+            state: New state ("ON" or "OFF")
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        return await ha_mqtt.set_switch_state(switch_id, state)

@@ -452,45 +452,65 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
         logger.info(f"Button press received for {plugin_id}_{entity_id}")
         await mqtt_service.info(plugin_id, f"Button {entity_id} pressed", category="data")
         
-        # Special handling for ingredient merger plugin buttons
-        if plugin_id == "ingredient_merger" and plugin_id in running_tasks:
+        # Special handling for plugin buttons
+        if plugin_id in running_tasks:
             # Get the running plugin instance from our dictionary
             if plugin_id in running_plugin_instances:
                 running_plugin = running_plugin_instances[plugin_id]
                 logger.debug(f"Found running instance of {plugin_id} in running_plugin_instances, object ID: {id(running_plugin)}")
                 
-                if entity_id == "accept_button":
-                    # Set the user accepted flag and trigger the event on the RUNNING instance
-                    if hasattr(running_plugin, "_user_accepted") and hasattr(running_plugin, "_user_decision_received"):
-                        running_plugin._user_accepted = True
-                        running_plugin._user_decision_received.set()
-                        logger.debug(f"Set accept flag for ingredient merger plugin (running instance)")
-                    else:
-                        logger.warning(f"Running plugin instance doesn't have expected attributes")
-                elif entity_id == "reject_button":
-                    # Set the user rejected flag and trigger the event on the RUNNING instance
-                    if hasattr(running_plugin, "_user_accepted") and hasattr(running_plugin, "_user_decision_received"):
-                        running_plugin._user_accepted = False
-                        running_plugin._user_decision_received.set()
-                        logger.debug(f"Set reject flag for ingredient merger plugin (running instance)")
-                    else:
-                        logger.warning(f"Running plugin instance doesn't have expected attributes")
+                # Handle ingredient merger plugin buttons
+                if plugin_id == "ingredient_merger":
+                    if entity_id == "accept_button":
+                        # Set the user accepted flag and trigger the event on the RUNNING instance
+                        if hasattr(running_plugin, "_user_accepted") and hasattr(running_plugin, "_user_decision_received"):
+                            running_plugin._user_accepted = True
+                            running_plugin._user_decision_received.set()
+                            logger.debug(f"Set accept flag for ingredient merger plugin (running instance)")
+                        else:
+                            logger.warning(f"Running plugin instance doesn't have expected attributes")
+                    elif entity_id == "reject_button":
+                        # Set the user rejected flag and trigger the event on the RUNNING instance
+                        if hasattr(running_plugin, "_user_accepted") and hasattr(running_plugin, "_user_decision_received"):
+                            running_plugin._user_accepted = False
+                            running_plugin._user_decision_received.set()
+                            logger.debug(f"Set reject flag for ingredient merger plugin (running instance)")
+                        else:
+                            logger.warning(f"Running plugin instance doesn't have expected attributes")
+                
+                # Handle shopping list generator plugin buttons
+                elif plugin_id == "shopping_list_generator":
+                    logger.info(entity_id)
+                    if entity_id == "continue_to_next_batch":
+                        # Trigger the event on the RUNNING instance to continue to next batch
+                        if hasattr(running_plugin, "_user_decision_received"):
+                            running_plugin._user_decision_received.set()
+                            logger.debug(f"Triggered continue button for shopping list generator plugin (running instance)")
+                        else:
+                            logger.warning(f"Running plugin instance doesn't have expected attributes")
             else:
                 logger.warning(f"Could not find running instance of {plugin_id} in running_plugin_instances")
                 
                 # Fallback to the old method, just in case
-                if entity_id == "accept_button":
-                    # Set the user accepted flag and trigger the event
-                    if hasattr(plugin, "_user_accepted") and hasattr(plugin, "_user_decision_received"):
-                        plugin._user_accepted = True
-                        plugin._user_decision_received.set()
-                        logger.debug(f"Set accept flag for ingredient merger plugin (new instance)")
-                elif entity_id == "reject_button":
-                    # Set the user rejected flag and trigger the event
-                    if hasattr(plugin, "_user_accepted") and hasattr(plugin, "_user_decision_received"):
-                        plugin._user_accepted = False
-                        plugin._user_decision_received.set()
-                        logger.debug(f"Set reject flag for ingredient merger plugin (new instance)")
+                if plugin_id == "ingredient_merger":
+                    if entity_id == "accept_button":
+                        # Set the user accepted flag and trigger the event
+                        if hasattr(plugin, "_user_accepted") and hasattr(plugin, "_user_decision_received"):
+                            plugin._user_accepted = True
+                            plugin._user_decision_received.set()
+                            logger.debug(f"Set accept flag for ingredient merger plugin (new instance)")
+                    elif entity_id == "reject_button":
+                        # Set the user rejected flag and trigger the event
+                        if hasattr(plugin, "_user_accepted") and hasattr(plugin, "_user_decision_received"):
+                            plugin._user_accepted = False
+                            plugin._user_decision_received.set()
+                            logger.debug(f"Set reject flag for ingredient merger plugin (new instance)")
+                elif plugin_id == "shopping_list_generator":
+                    if entity_id == "continue_to_next_batch":
+                        # Trigger the event to continue to next batch
+                        if hasattr(plugin, "_user_decision_received"):
+                            plugin._user_decision_received.set()
+                            logger.debug(f"Triggered continue button for shopping list generator plugin (new instance)")
         
         return
         
@@ -552,6 +572,15 @@ async def process_message(topic: str, payload: str, registry: PluginRegistry, co
                             if plugin_id not in plugin_configs:
                                 plugin_configs[plugin_id] = {}
                             plugin_configs[plugin_id][attr_name] = value
+                            
+                            # Update the running plugin instance if it exists
+                            if plugin_id in running_plugin_instances:
+                                running_plugin = running_plugin_instances[plugin_id]
+                                if hasattr(running_plugin, attr_name):
+                                    setattr(running_plugin, attr_name, value)
+                                    logger.debug(f"Updated running plugin instance {plugin_id} attribute {attr_name} to {value}")
+                                else:
+                                    logger.warning(f"Running plugin instance {plugin_id} has no attribute {attr_name}")
                             
                             # Update the switch state in Home Assistant
                             async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:

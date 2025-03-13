@@ -20,8 +20,10 @@ The GPT processing helps by:
 import os
 import json
 import logging
+import asyncio
+import math
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, Tuple
 
 from core.plugin import Plugin
 from core.services import MqttService, MealieApiService, GptService
@@ -53,6 +55,18 @@ class ShoppingListGeneratorPlugin(Plugin):
         # Plugin configuration
         self._list_length = 8
         self._include_today = False  # Default to not including today (start from tomorrow)
+        
+        # Batch review configuration
+        self._batch_size = 10  # Number of items to show at once
+        self._current_batch_index = 0
+        self._cleaned_list = []  # Holds all items after GPT processing
+        self._selected_items = []  # Holds items selected for the shopping list
+        self._waiting_for_user_input = False
+        self._user_decision_received = asyncio.Event()
+        
+        # Initialize switch attributes for item selection
+        for i in range(self._batch_size):
+            setattr(self, f"_add_to_list_{i}", False)
     
     @property
     def id(self) -> str:
@@ -86,11 +100,23 @@ class ShoppingListGeneratorPlugin(Plugin):
         Returns:
             A dictionary containing the MQTT entity configuration for this plugin.
         """
+        # Create sensors for each item in a batch
+        item_sensors = {}
+        for i in range(self._batch_size):
+            item_sensors[f"item_{i}"] = {"id": f"item_{i}", "name": f"Item {i+1}"}
+        
+        # Create switches for each item in a batch
+        item_switches = {}
+        for i in range(self._batch_size):
+            item_switches[f"add_to_list_{i}"] = {"id": f"add_to_list_{i}", "name": f"Add to List {i+1}", "value": False}
+        
         return {
             "switch": True,
             "sensors": {
                 "feedback": {"id": "feedback", "name": "Shopping List Feedback"},
-                "progress": {"id": "progress", "name": "Shopping List Progress"}
+                "progress": {"id": "progress", "name": "Shopping List Progress"},
+                "current_batch": {"id": "current_batch", "name": "Current Shopping Items"},
+                **item_sensors
             },
             "numbers": {
                 "list_length": {
@@ -105,7 +131,11 @@ class ShoppingListGeneratorPlugin(Plugin):
                 }
             },
             "switches": {
-                "include_today": {"id": "include_today", "name": "Include Today", "value": self._include_today}
+                "include_today": {"id": "include_today", "name": "Include Today", "value": self._include_today},
+                **item_switches
+            },
+            "buttons": {
+                "continue_to_next_batch": {"id": "continue_to_next_batch", "name": "Continue to Next Batch"}
             }
         }
     
@@ -280,6 +310,8 @@ class ShoppingListGeneratorPlugin(Plugin):
         Returns:
             True if successful, False otherwise
         """
+        logger.info(f"Creating shopping list '{list_name}' with {len(cleaned_list)} items")
+        
         # Create the shopping list
         shopping_list_id = await self._mealie.create_shopping_list(list_name)
         if not shopping_list_id:
@@ -300,14 +332,22 @@ class ShoppingListGeneratorPlugin(Plugin):
         success_count = 0
         error_count = 0
         
+        # Log all items that will be added
+        logger.info("Items to add to shopping list:")
+        for i, item in enumerate(cleaned_list):
+            formatted_note = f"{item['quantity']} {item['unit']} {item['name']}".strip()
+            logger.info(f"  {i+1}. {formatted_note} ({item['category']})")
+        
         for item in cleaned_list:
             # Format the item note
-            formatted_note = f"{item['quantity']} {item['unit']} {item['name']}".strip()
+            formatted_note = f"{item['name']} ({item['quantity']} {item['unit']})"
             
             # Add to Mealie
+            logger.info(f"Adding item to shopping list: {formatted_note}")
             ok = await self._mealie.add_item_to_shopping_list(shopping_list_id, formatted_note)
             if ok:
                 success_count += 1
+                logger.info(f"Successfully added item: {formatted_note}")
             else:
                 error_count += 1
                 logger.error(f"Failed to add item to shopping list: {formatted_note}")
@@ -319,11 +359,159 @@ class ShoppingListGeneratorPlugin(Plugin):
             summary += f" ({error_count} errors)"
         
         logger.info(summary)
+        await self._mqtt.success(self.id, summary)
         return True
+
+    async def update_item_displays(self, batch_items: List[Dict[str, Any]]) -> None:
+        """
+        Update the item displays for the current batch.
+        
+        Args:
+            batch_items: List of items to display in the current batch
+        """
+        # Reset all switch attributes first
+        for i in range(self._batch_size):
+            setattr(self, f"_add_to_list_{i}", False)
+            
+        # Clear all switches in the UI
+        for i in range(self._batch_size):
+            switch_id = f"add_to_list_{i}"
+            sensor_id = f"item_{i}"
+            
+            if i < len(batch_items):
+                item = batch_items[i]
+                # Use only the item name as the primary text
+                display_name = f"{item['name']}"
+                # Create quantity info as a separate attribute
+                quantity_info = f"{item['quantity']} {item['unit']}"
+                
+                # Update the sensor with both the name and quantity info
+                await self._mqtt.log(
+                    self.id, 
+                    sensor_id, 
+                    display_name, 
+                    reset=True, 
+                    category="data", 
+                    extra_attributes={"quantity_info": quantity_info}
+                )
+                
+                # Set switch to OFF by default (assuming most items are in pantry)
+                await self._mqtt.set_switch_state(f"{self.id}_{switch_id}", "OFF")
+            else:
+                # Clear unused slots
+                await self._mqtt.log(self.id, sensor_id, "", reset=True)
+                
+                # Turn off unused switches
+                await self._mqtt.set_switch_state(f"{self.id}_{switch_id}", "OFF")
+
+    async def present_batch_to_user(self, batch_index: int) -> bool:
+        """
+        Present a batch of items to the user and wait for decision.
+        
+        Args:
+            batch_index: Index of the current batch
+            
+        Returns:
+            True if user completed the batch review, False if timeout or error
+        """
+        # Calculate start and end indices
+        start_idx = batch_index * self._batch_size
+        end_idx = min(start_idx + self._batch_size, len(self._cleaned_list))
+        
+        # Get current batch of items
+        current_batch = self._cleaned_list[start_idx:end_idx]
+        
+        # Update progress
+        total_batches = math.ceil(len(self._cleaned_list) / self._batch_size)
+        progress_pct = 40 + int(50 * (batch_index / total_batches))
+        await self._mqtt.update_progress(
+            self.id, 
+            "progress", 
+            progress_pct, 
+            f"Reviewing items (batch {batch_index + 1}/{total_batches})"
+        )
+        
+        # Update item displays
+        await self.update_item_displays(current_batch)
+        
+        # Create batch info message
+        message = [
+            f"## Shopping List Review - Batch {batch_index + 1}/{total_batches}",
+            "",
+            "Toggle switches ON for items you need to buy (OFF for items you already have)",
+            f"Showing items {start_idx + 1}-{end_idx} of {len(self._cleaned_list)}",
+            "",
+            "Click 'Continue' when done with this batch"
+        ]
+        
+        # Display batch info
+        await self._mqtt.log(self.id, "current_batch", "\n".join(message), reset=True)
+        
+        # Reset event and wait for user decision
+        self._user_decision_received.clear()
+        self._waiting_for_user_input = True
+        
+        try:
+            # Wait for the user to click "Continue"
+            await asyncio.wait_for(self._user_decision_received.wait(), timeout=3600)  # 1 hour timeout
+            
+            # Process user selections for this batch
+            await self.process_user_selections(current_batch)
+            
+            return True
+        except asyncio.TimeoutError:
+            await self._mqtt.warning(self.id, "User decision timeout. Skipping remaining items.")
+            return False
+        finally:
+            self._waiting_for_user_input = False
+
+    async def process_user_selections(self, batch_items: List[Dict[str, Any]]) -> None:
+        """
+        Process user selections for the current batch.
+        
+        Args:
+            batch_items: List of items in the current batch
+        """
+        logger.info(f"Processing user selections for batch with {len(batch_items)} items")
+        
+        # Check the switch attributes for each item
+        for i, item in enumerate(batch_items):
+            if i >= self._batch_size:
+                break
+                
+            # Check if the switch attribute is True (item should be added to shopping list)
+            switch_attr = f"_add_to_list_{i}"
+            
+            # Log the attribute name and value for debugging
+            attr_value = getattr(self, switch_attr, None)
+            logger.info(f"Checking switch attribute {switch_attr}: {attr_value}")
+            
+            if hasattr(self, switch_attr) and getattr(self, switch_attr):
+                self._selected_items.append(item)
+                logger.info(f"Added item to shopping list: {item['name']}")
+                await self._mqtt.info(self.id, f"Added to shopping list: {item['name']}", category="data")
+        
+        # Log the total number of selected items
+        logger.info(f"Total items selected for shopping list: {len(self._selected_items)}")
+
+    # We no longer need the get_switch_state method as we're using attributes directly
 
     async def execute(self) -> None:
         """Execute the shopping list generator plugin."""
         try:
+            # Initialize all sensors and switches to avoid UI confusion
+            # Reset all item sensors
+            for i in range(self._batch_size):
+                await self._mqtt.log(self.id, f"item_{i}", "", reset=True)
+                
+                # Turn off all item switches
+                switch_id = f"add_to_list_{i}"
+                await self._mqtt.set_switch_state(f"{self.id}_{switch_id}", "OFF")
+            
+            # Reset feedback and current batch sensors
+            await self._mqtt.log(self.id, "feedback", "", reset=True)
+            await self._mqtt.log(self.id, "current_batch", "", reset=True)
+            
             # Set up progress sensor
             await self._mqtt.setup_mqtt_progress(self.id, "progress", "Shopping List Progress")
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting shopping list generation")
@@ -379,22 +567,53 @@ class ShoppingListGeneratorPlugin(Plugin):
                 
             # Clean up shopping list
             await self._mqtt.update_progress(self.id, "progress", 40, "Cleaning up shopping list with GPT")
-            cleaned_list = await self.clean_up_shopping_list(raw_ingredients)
+            self._cleaned_list = await self.clean_up_shopping_list(raw_ingredients)
+            if not self._cleaned_list:
+                logger.warning("No items in cleaned shopping list")
+                await self._mqtt.warning(self.id, "No items in cleaned shopping list.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No items in cleaned shopping list")
+                return
 
+            # Sort items by category for better user experience
+            self._cleaned_list.sort(key=lambda x: x.get('category', 'Other'))
+            
             # Handle dry run mode
             if self._dry_run:
-                logger.info(f"[DRY-RUN] Would create shopping list: {list_name} with {len(cleaned_list)} items")
-                await self._mqtt.info(self.id, f"[DRY-RUN] Would create shopping list: {list_name} with {len(cleaned_list)} items", category="skip")
+                logger.info(f"[DRY-RUN] Would create shopping list: {list_name} with {len(self._cleaned_list)} items")
+                await self._mqtt.info(self.id, f"[DRY-RUN] Would create shopping list: {list_name} with {len(self._cleaned_list)} items", category="skip")
                 await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Dry run mode")
                 return
 
-            # Create shopping list in Mealie
-            await self._mqtt.update_progress(self.id, "progress", 70, "Creating shopping list in Mealie")
-            success = await self.create_mealie_shopping_list(list_name, cleaned_list)
-            if success:
-                await self._mqtt.success(self.id, "Done! Your Mealie shopping list is updated.")
-                logger.info("Shopping list created successfully")
-                await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
+            # Present items in batches for user review
+            total_batches = math.ceil(len(self._cleaned_list) / self._batch_size)
+            self._selected_items = []
+            self._current_batch_index = 0
+            
+            await self._mqtt.info(self.id, f"Starting shopping list review with {total_batches} batches", category="start")
+            
+            for batch_idx in range(total_batches):
+                success = await self.present_batch_to_user(batch_idx)
+                if not success:
+                    break
+                self._current_batch_index += 1
+            
+            # Clear the current batch display
+            await self._mqtt.log(self.id, "current_batch", "Shopping list review complete.", reset=True)
+            
+            # Create shopping list with only selected items
+            await self._mqtt.update_progress(self.id, "progress", 90, "Creating shopping list in Mealie")
+            
+            if self._selected_items:
+                success = await self.create_mealie_shopping_list(list_name, self._selected_items)
+                if success:
+                    await self._mqtt.success(
+                        self.id, 
+                        f"Done! Added {len(self._selected_items)} of {len(self._cleaned_list)} items to your Mealie shopping list."
+                    )
+                    await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
+            else:
+                await self._mqtt.info(self.id, "No items selected for shopping list.")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No items selected")
             
         except Exception as e:
             error_msg = f"Error generating shopping list: {str(e)}"

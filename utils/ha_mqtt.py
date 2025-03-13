@@ -336,7 +336,8 @@ async def log(
     level: int = INFO,
     category: Optional[str] = None,
     log_to_ha: bool = True,
-    log_to_console: bool = None
+    log_to_console: bool = None,
+    extra_attributes: Optional[Dict[str, str]] = None
 ) -> bool:
     # Determine default log_to_console value based on level if not explicitly set
     if log_to_console is None:
@@ -420,9 +421,17 @@ async def log(
     try:
         async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
             await client.publish(state_topic, state_value, retain=True)
+            
+            # Create attributes dictionary with full_text
+            attributes = {"full_text": log_buffers[(script_id, sensor_id)]}
+            
+            # Add any extra attributes if provided
+            if extra_attributes:
+                attributes.update(extra_attributes)
+                
             await client.publish(
                 attributes_topic,
-                json.dumps({"full_text": log_buffers[(script_id, sensor_id)]}),
+                json.dumps(attributes),
                 retain=True
             )
         return True
@@ -431,38 +440,38 @@ async def log(
         return False
 
 # Convenience functions for different log levels
-async def debug(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+async def debug(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log a debug message (not sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=DEBUG, category=category, log_to_ha=False, log_to_console=False)
+    return await log(script_id, sensor_id or "status", message, level=DEBUG, category=category, log_to_ha=False, log_to_console=False, extra_attributes=extra_attributes)
 
-async def info(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+async def info(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log an info message."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category=category, log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category=category, log_to_ha=False, extra_attributes=extra_attributes)
 
-async def warning(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+async def warning(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log a warning message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=WARNING, category=category, log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=WARNING, category=category, log_to_ha=False, extra_attributes=extra_attributes)
 
-async def error(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+async def error(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log an error message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=ERROR, category=category, log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=ERROR, category=category, log_to_ha=False, extra_attributes=extra_attributes)
 
-async def critical(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+async def critical(script_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log a critical message (sent to Home Assistant)."""
-    return await log(script_id, sensor_id or "status", message, level=CRITICAL, category=category, log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=CRITICAL, category=category, log_to_ha=False, extra_attributes=extra_attributes)
 
 # Special purpose logging functions
-async def gpt_decision(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+async def gpt_decision(script_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log a GPT decision."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="gpt", log_to_ha=False, log_to_console=False)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="gpt", log_to_ha=False, log_to_console=False, extra_attributes=extra_attributes)
 
-async def progress(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+async def progress(script_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log a progress update."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="progress", log_to_ha=False)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="progress", log_to_ha=False, extra_attributes=extra_attributes)
 
-async def success(script_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+async def success(script_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     """Log a success message."""
-    return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=False, log_to_console=True)
+    return await log(script_id, sensor_id or "status", message, level=INFO, category="success", log_to_ha=False, log_to_console=True, extra_attributes=extra_attributes)
 
 async def setup_mqtt_progress(script_id: str, sensor_id: str, sensor_name: str) -> bool:
     """
@@ -576,4 +585,26 @@ async def update_progress(script_id: str, sensor_id: str, percentage: int, activ
             return True
     except Exception as e:
         logger.error(f"Failed to update progress for {script_id}: {str(e)}")
+        return False
+
+async def set_switch_state(switch_id: str, state: str) -> bool:
+    """
+    Set the state of a switch in Home Assistant.
+    
+    Args:
+        switch_id: ID of the switch (e.g. plugin_id_switch_id)
+        state: New state ("ON" or "OFF")
+        
+    Returns:
+        True if update was successful, False otherwise
+    """
+    try:
+        state_topic = f"{MQTT_DISCOVERY_PREFIX}/switch/{switch_id}/state"
+        
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(state_topic, payload=state, retain=True)
+            logger.debug(f"Set switch state for {switch_id} to {state}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to set switch state for {switch_id}: {str(e)}")
         return False

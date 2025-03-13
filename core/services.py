@@ -135,7 +135,8 @@ class MqttService(ABC):
         reset: bool = False, 
         level: int = 20,  # INFO
         category: Optional[str] = None,
-        log_to_ha: bool = True
+        log_to_ha: bool = True,
+        extra_attributes: Optional[Dict[str, str]] = None
     ) -> bool:
         """
         Enhanced log function that handles both console and Home Assistant logging.
@@ -148,6 +149,7 @@ class MqttService(ABC):
             level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
             category: Optional category for emoji selection
             log_to_ha: Whether to log to Home Assistant (set to False for debug messages)
+            extra_attributes: Optional dictionary of additional attributes to include
             
         Returns:
             True if logging was successful, False otherwise
@@ -233,6 +235,20 @@ class MqttService(ABC):
             sensor_id: Unique identifier for this specific sensor
             percentage: Progress percentage (0-100)
             activity: Current activity description
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        pass
+        
+    @abstractmethod
+    async def set_switch_state(self, switch_id: str, state: str) -> bool:
+        """
+        Set the state of a switch in Home Assistant.
+        
+        Args:
+            switch_id: ID of the switch (e.g. plugin_id_switch_id)
+            state: New state ("ON" or "OFF")
             
         Returns:
             True if update was successful, False otherwise
