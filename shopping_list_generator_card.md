@@ -127,8 +127,8 @@ cards:
           cards:
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_1
-              primary: "{{ state_attr('sensor.mealiemate_item_1', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_1', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_1') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_1') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_1', 'on') %}
                   mdi:cart-plus
@@ -158,8 +158,8 @@ cards:
               
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_2
-              primary: "{{ state_attr('sensor.mealiemate_item_2', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_2', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_2') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_2') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_2', 'on') %}
                   mdi:cart-plus
@@ -190,8 +190,8 @@ cards:
           cards:
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_3
-              primary: "{{ state_attr('sensor.mealiemate_item_3', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_3', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_3') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_3') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_3', 'on') %}
                   mdi:cart-plus
@@ -221,8 +221,8 @@ cards:
               
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_4
-              primary: "{{ state_attr('sensor.mealiemate_item_4', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_4', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_4') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_4') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_4', 'on') %}
                   mdi:cart-plus
@@ -253,8 +253,8 @@ cards:
           cards:
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_5
-              primary: "{{ state_attr('sensor.mealiemate_item_5', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_5', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_5') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_5') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_5', 'on') %}
                   mdi:cart-plus
@@ -284,8 +284,8 @@ cards:
               
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_6
-              primary: "{{ state_attr('sensor.mealiemate_item_6', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_6', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_6') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_6') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_6', 'on') %}
                   mdi:cart-plus
@@ -316,8 +316,8 @@ cards:
           cards:
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_7
-              primary: "{{ state_attr('sensor.mealiemate_item_7', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_7', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_7') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_7') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_7', 'on') %}
                   mdi:cart-plus
@@ -347,8 +347,8 @@ cards:
               
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_8
-              primary: "{{ state_attr('sensor.mealiemate_item_8', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_8', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_8') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_8') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_8', 'on') %}
                   mdi:cart-plus
@@ -379,8 +379,8 @@ cards:
           cards:
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_9
-              primary: "{{ state_attr('sensor.mealiemate_item_9', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_9', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_9') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_9') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_9', 'on') %}
                   mdi:cart-plus
@@ -410,8 +410,8 @@ cards:
           
             - type: custom:mushroom-template-card
               entity: switch.mealiemate_add_to_list_10
-              primary: "{{ state_attr('sensor.mealiemate_item_10', 'full_text') }}"
-              secondary: "{{ state_attr('sensor.mealiemate_item_10', 'quantity_info') }}"
+              primary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'item_10') }}"
+              secondary: "{{ state_attr('sensor.mealiemate_shopping_list_items', 'quantity_10') }}"
               icon: >-
                 {% if is_state('switch.mealiemate_add_to_list_10', 'on') %}
                   mdi:cart-plus

@@ -100,23 +100,18 @@ class ShoppingListGeneratorPlugin(Plugin):
         Returns:
             A dictionary containing the MQTT entity configuration for this plugin.
         """
-        # Create sensors for each item in a batch
-        item_sensors = {}
-        for i in range(self._batch_size):
-            item_sensors[f"item_{i}"] = {"id": f"item_{i}", "name": f"Item {i+1}"}
-        
         # Create switches for each item in a batch
         item_switches = {}
         for i in range(self._batch_size):
             item_switches[f"add_to_list_{i}"] = {"id": f"add_to_list_{i}", "name": f"Add to List {i+1}", "value": False}
-        
+
         return {
             "switch": True,
             "sensors": {
                 "feedback": {"id": "feedback", "name": "Shopping List Feedback"},
                 "progress": {"id": "progress", "name": "Shopping List Progress"},
                 "current_batch": {"id": "current_batch", "name": "Current Shopping Items"},
-                **item_sensors
+                "shopping_list_items": {"id": "shopping_list_items", "name": "Shopping List Items"},
             },
             "numbers": {
                 "list_length": {
@@ -138,7 +133,7 @@ class ShoppingListGeneratorPlugin(Plugin):
                 "continue_to_next_batch": {"id": "continue_to_next_batch", "name": "Continue to Next Batch"}
             }
         }
-    
+
     async def get_recipe_ingredients(self, recipe_id: str) -> List[Dict[str, Any]]:
         """
         Fetch and extract ingredients from a recipe.
@@ -378,31 +373,41 @@ class ShoppingListGeneratorPlugin(Plugin):
             switch_id = f"add_to_list_{i}"
             sensor_id = f"item_{i}"
             
+        # Prepare a dictionary to hold all attributes
+        all_attributes = {}
+
+        # Clear all attributes
+        for i in range(self._batch_size):
+          all_attributes[f"item_{i + 1}"] = ""
+          all_attributes[f"quantity_{i + 1}"] = ""
+
+        for i in range(self._batch_size):
+            switch_id = f"add_to_list_{i}"
+
             if i < len(batch_items):
                 item = batch_items[i]
-                # Use only the item name as the primary text
                 display_name = f"{item['name']}"
-                # Create quantity info as a separate attribute
                 quantity_info = f"{item['quantity']} {item['unit']}"
-                
-                # Update the sensor with both the name and quantity info
-                await self._mqtt.log(
-                    self.id, 
-                    sensor_id, 
-                    display_name, 
-                    reset=True, 
-                    category="data", 
-                    extra_attributes={"quantity_info": quantity_info}
-                )
-                
-                # Set switch to OFF by default (assuming most items are in pantry)
+
+                # Add attributes for this item
+                all_attributes[f"item_{i + 1}"] = display_name
+                all_attributes[f"quantity_{i + 1}"] = quantity_info
+
+                # Set switch to OFF
                 await self._mqtt.set_switch_state(f"{self.id}_{switch_id}", "OFF")
             else:
-                # Clear unused slots
-                await self._mqtt.log(self.id, sensor_id, "", reset=True)
-                
                 # Turn off unused switches
                 await self._mqtt.set_switch_state(f"{self.id}_{switch_id}", "OFF")
+
+        # Update the single sensor with all item attributes in one call
+        await self._mqtt.log(
+            self.id,
+            "shopping_list_items",
+            "",  # No primary text needed
+            reset=True,
+            category="data",
+            extra_attributes=all_attributes
+        )
 
     async def present_batch_to_user(self, batch_index: int) -> bool:
         """
@@ -500,26 +505,38 @@ class ShoppingListGeneratorPlugin(Plugin):
         """Execute the shopping list generator plugin."""
         try:
             # Initialize all sensors and switches to avoid UI confusion
-            # Reset all item sensors
+            # Prepare a dictionary to hold all attributes (initialized to empty)
+            initial_attributes = {}
             for i in range(self._batch_size):
-                await self._mqtt.log(self.id, f"item_{i}", "", reset=True)
-                
-                # Turn off all item switches
+                initial_attributes[f"item_{i + 1}"] = ""
+                initial_attributes[f"quantity_{i + 1}"] = ""
+
+            # Clear the shopping list items sensor and set initial attributes
+            await self._mqtt.log(
+                self.id,
+                "shopping_list_items",
+                "",
+                reset=True,
+                extra_attributes=initial_attributes
+            )
+
+            # Turn off all item switches
+            for i in range(self._batch_size):
                 switch_id = f"add_to_list_{i}"
                 await self._mqtt.set_switch_state(f"{self.id}_{switch_id}", "OFF")
-            
+
             # Reset feedback and current batch sensors
             await self._mqtt.log(self.id, "feedback", "", reset=True)
             await self._mqtt.log(self.id, "current_batch", "", reset=True)
-            
+
             # Set up progress sensor
             await self._mqtt.setup_mqtt_progress(self.id, "progress", "Shopping List Progress")
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting shopping list generation")
-            
+
             # Get configuration
             num_days = self._list_length
             list_name = f"Mealplan {datetime.today().strftime('%d %b')}"
-            
+
             await self._mqtt.info(self.id, f"Working on your new shopping list: {list_name}", category="start")
             logger.info(f"Generating shopping list: {list_name} for {num_days} days")
 
