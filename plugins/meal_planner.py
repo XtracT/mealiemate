@@ -122,6 +122,11 @@ class MealPlannerPlugin(Plugin):
         """Description of what the plugin does."""
         return "Generates structured, balanced meal plans based on existing recipes."
     
+    @property
+    def reset_sensors(self):
+        """Sensors that need to be reset"""
+        return ["feedback"]
+    
     def get_mqtt_entities(self) -> Dict[str, Any]:
         """
         Get MQTT entities configuration for Home Assistant.
@@ -254,6 +259,11 @@ class MealPlannerPlugin(Plugin):
 
     async def execute(self) -> None:
         """Execute the meal planner plugin."""
+
+        # Reset sensors
+        for sensor_id in self.reset_sensors:
+            await self._mqtt.reset_sensor(self.id, sensor_id)
+
         try:
             # Get configuration from MQTT entities
             num_days = self._mealplan_length
@@ -261,7 +271,6 @@ class MealPlannerPlugin(Plugin):
 
             # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting meal planning")
-
             await self._mqtt.info(self.id, "Starting meal planning process...", category="start")
 
             # 1) Fetch all recipes

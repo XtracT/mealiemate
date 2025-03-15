@@ -75,6 +75,9 @@ class PluginManager:
             
             # Apply any stored configuration values to the plugin
             self.apply_config_to_plugin(plugin)
+
+            # Reset plugin sensors
+            await self._reset_plugin_sensors(plugin)
         except Exception as e:
             logger.error(f"Error creating plugin instance for {plugin_id}: {str(e)}")
             await self._mqtt_service.error(plugin_id, f"Error creating plugin instance: {str(e)}")
@@ -133,7 +136,22 @@ class PluginManager:
         logger.debug(f"Removed plugin instance for {plugin_id} from running_plugin_instances")
         
         return True
-    
+
+    async def _reset_plugin_sensors(self, plugin: Plugin) -> None:
+        """Reset sensors defined by the plugin."""
+        plugin_id = plugin.id
+        if hasattr(plugin, "reset_sensors"):
+            try:
+                sensor_ids = plugin.reset_sensors
+                if isinstance(sensor_ids, list):
+                    for sensor_id in sensor_ids:
+                        await self._mqtt_service.reset_sensor(plugin_id, sensor_id)
+                        logger.debug(f"Resetting {sensor_id} sensor for plugin {plugin_id}")
+                else:
+                    logger.warning(f"Plugin {plugin_id} has reset_sensors attribute, but it is not a list.")
+            except Exception as e:
+                logger.error(f"Error resetting sensors for plugin {plugin_id}: {str(e)}")
+
     async def _execute_plugin(self, plugin_id: str, plugin: Plugin) -> None:
         """
         Execute a plugin and handle its lifecycle.

@@ -82,6 +82,11 @@ class IngredientMergerPlugin(Plugin):
         """Description of what the plugin does."""
         return "Identifies ingredients across recipes that should be merged."
     
+    @property
+    def reset_sensors(self):
+        """Sensors that need to be reset"""
+        return ["feedback", "current_suggestion"]
+    
     def get_mqtt_entities(self) -> Dict[str, Any]:
         """
         Get MQTT entities configuration for Home Assistant.
@@ -376,7 +381,10 @@ class IngredientMergerPlugin(Plugin):
         try:
             # Initialize
             await self._mqtt.info(self.id, "Starting ingredient merger analysis...")
-            
+            # Reset sensors
+            for sensor_id in self.reset_sensors:
+                await self._mqtt.reset_sensor(self.id, sensor_id)
+
             # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting ingredient merger")
             
@@ -593,3 +601,4 @@ class IngredientMergerPlugin(Plugin):
             error_msg = f"Error in ingredient merger: {str(e)}"
             logger.error(error_msg, exc_info=True)
             await self._mqtt.error(self.id, error_msg)
+    

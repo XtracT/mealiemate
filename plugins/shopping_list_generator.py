@@ -73,6 +73,11 @@ class ShoppingListGeneratorPlugin(Plugin):
         """Unique identifier for the plugin."""
         return self.get_plugin_id()
     
+    @property
+    def reset_sensors(self):
+        """Sensors that need to be reset"""
+        return ["feedback", "current_batch", "shopping_list_items"]
+
     @classmethod
     def get_plugin_id(cls) -> str:
         """
@@ -375,7 +380,6 @@ class ShoppingListGeneratorPlugin(Plugin):
             
         # Prepare a dictionary to hold all attributes
         all_attributes = {}
-
         # Clear all attributes
         for i in range(self._batch_size):
           all_attributes[f"item_{i + 1}"] = ""
@@ -502,6 +506,10 @@ class ShoppingListGeneratorPlugin(Plugin):
     # We no longer need the get_switch_state method as we're using attributes directly
 
     async def execute(self) -> None:
+        # Reset sensors
+        for sensor_id in self.reset_sensors:
+            await self._mqtt.reset_sensor(self.id, sensor_id)
+
         """Execute the shopping list generator plugin."""
         try:
             # Initialize all sensors and switches to avoid UI confusion
@@ -511,23 +519,10 @@ class ShoppingListGeneratorPlugin(Plugin):
                 initial_attributes[f"item_{i + 1}"] = ""
                 initial_attributes[f"quantity_{i + 1}"] = ""
 
-            # Clear the shopping list items sensor and set initial attributes
-            await self._mqtt.log(
-                self.id,
-                "shopping_list_items",
-                "",
-                reset=True,
-                extra_attributes=initial_attributes
-            )
-
             # Turn off all item switches
             for i in range(self._batch_size):
                 switch_id = f"add_to_list_{i}"
                 await self._mqtt.set_switch_state(f"{self.id}_{switch_id}", "OFF")
-
-            # Reset feedback and current batch sensors
-            await self._mqtt.log(self.id, "feedback", "", reset=True)
-            await self._mqtt.log(self.id, "current_batch", "", reset=True)
 
             # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting shopping list generation")
@@ -630,8 +625,9 @@ class ShoppingListGeneratorPlugin(Plugin):
             else:
                 await self._mqtt.info(self.id, "No items selected for shopping list.")
                 await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No items selected")
-            
+        
         except Exception as e:
             error_msg = f"Error generating shopping list: {str(e)}"
             logger.error(error_msg, exc_info=True)
             await self._mqtt.error(self.id, error_msg)
+

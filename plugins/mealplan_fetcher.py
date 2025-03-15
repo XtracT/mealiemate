@@ -103,6 +103,11 @@ class MealplanFetcherPlugin(Plugin):
         """Description of what the plugin does."""
         return "Fetches and visualizes meal plans from Mealie."
     
+    @property
+    def reset_sensors(self):
+        """Sensors that need to be reset"""
+        return []
+    
     def get_mqtt_entities(self) -> Dict[str, Any]:
         """
         Get MQTT entities configuration for Home Assistant.
@@ -243,7 +248,7 @@ class MealplanFetcherPlugin(Plugin):
             else:
                 lines.append(current_line)
                 current_line = word
-                
+            
         lines.append(current_line)
         return lines
 
@@ -293,7 +298,7 @@ class MealplanFetcherPlugin(Plugin):
         The image contains:
           - A 2-pixel top margin.
           - Centered, rounded red day label boxes (200px wide) for the next 7 days,
-            with the actual day names.
+          - with the actual day names.
           - A thin horizontal red line across the full width, aligned with the middle of each box.
           - Two columns for meal text (Lunch and Dinner) in the remaining space.
         
@@ -426,7 +431,6 @@ class MealplanFetcherPlugin(Plugin):
         if not bot_token or not chat_id:
             logger.warning("Telegram token or chat ID not provided in .env. Skipping Telegram send.")
             return False
-
         try:
             bot = Bot(token=bot_token)
             buffer = BytesIO()
@@ -440,6 +444,10 @@ class MealplanFetcherPlugin(Plugin):
             return False
 
     async def execute(self) -> None:
+        # Reset sensors
+        for sensor_id in self.reset_sensors:
+            await self._mqtt.reset_sensor(self.id, sensor_id)
+
         """
         Main workflow:
           1. Fetch meal plan from Mealie (7 days).
@@ -502,3 +510,4 @@ class MealplanFetcherPlugin(Plugin):
         else:
             await self._mqtt.warning(self.id, "Telegram credentials not provided. Skipping image send.")
             await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Telegram send skipped")
+

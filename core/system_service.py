@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Set, Tuple
 
 from core.plugin_registry import PluginRegistry
+from core.plugin_manager import PluginManager
 from core.container import Container
 from core.services import MqttService
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 class SystemService:
     """Handles system-level tasks."""
     
-    def __init__(self, registry: PluginRegistry, container: Container):
+    def __init__(self, registry: PluginRegistry, container: Container, plugin_manager: PluginManager):
         """
         Initialize the SystemService.
         
@@ -35,6 +36,9 @@ class SystemService:
         """
         self._registry = registry
         self._container = container
+        self._plugin_manager = plugin_manager
+
+
         self._mqtt_service = container.resolve(MqttService)
         if not self._mqtt_service:
             raise ValueError("MQTT service not found in container")
@@ -144,27 +148,22 @@ class SystemService:
         if not self._mqtt_service:
             logger.error("MQTT service not found in container")
             return
-        
-        # Special sensor IDs that should be reset
-        special_sensor_ids = ["feedback", "dough_recipe", "current_suggestion"]  # Excluding "mealplan" as requested
-        
+
+        if not self._plugin_manager:
+            logger.error("Plugin manager not found in container")
+            return
+
         # Iterate through all plugins
         for plugin_id, plugin_cls in self._registry.get_all_plugins().items():
             try:
                 # Create plugin instance with dependencies injected
                 plugin = self._container.inject(plugin_cls)
-                
-                # Get MQTT entity configuration from the plugin
-                entities = plugin.get_mqtt_entities()
-                
-                # Check if the plugin has any special sensors
-                for sensor_id in special_sensor_ids:
-                    if "sensors" in entities and sensor_id in entities["sensors"]:
-                        logger.debug(f"Resetting {sensor_id} sensor for plugin {plugin_id}")
-                        await self._mqtt_service.reset_sensor(plugin_id, sensor_id)
+
+                # Reset plugin sensors
+                await self._plugin_manager._reset_plugin_sensors(plugin)
             except Exception as e:
                 logger.error(f"Error resetting sensors for plugin {plugin_id}: {str(e)}")
-    
+
     async def start_midnight_reset_task(self) -> asyncio.Task:
         """
         Start a task to check for midnight and reset special sensors.

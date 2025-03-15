@@ -98,6 +98,11 @@ class RecipeTaggerPlugin(Plugin):
         """Description of what the plugin does."""
         return "Classifies recipes in Mealie by assigning tags and categories using GPT."
     
+    @property
+    def reset_sensors(self):
+        """Sensors that need to be reset"""
+        return ["feedback"]
+    
     def get_mqtt_entities(self) -> Dict[str, Any]:
         """
         Get MQTT entities configuration for Home Assistant.
@@ -296,6 +301,10 @@ class RecipeTaggerPlugin(Plugin):
         return ingredients
 
     async def execute(self) -> None:
+        # Reset sensors
+        for sensor_id in self.reset_sensors:
+            await self._mqtt.reset_sensor(self.id, sensor_id)
+
         """Execute the recipe tagger plugin."""
         try:
             # Update progress
@@ -408,3 +417,4 @@ class RecipeTaggerPlugin(Plugin):
             error_msg = f"Error in recipe tagger: {str(e)}"
             logger.error(error_msg, exc_info=True)
             await self._mqtt.error(self.id, error_msg)
+

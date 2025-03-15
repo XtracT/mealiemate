@@ -76,7 +76,12 @@ class NeapolitanPizzaPlugin(Plugin):
     def description(self) -> str:
         """Description of what the plugin does."""
         return "Calculates dough ingredients and fermentation schedule for Neapolitan-style pizza."
-    
+
+    @property
+    def reset_sensors(self):
+        """Sensors that need to be reset"""
+        return ["dough_recipe"]
+
     def get_mqtt_entities(self) -> Dict[str, Any]:
         """
         Get MQTT entities configuration for Home Assistant.
@@ -350,6 +355,10 @@ class NeapolitanPizzaPlugin(Plugin):
         5. Formats and publishes the recipe via MQTT
         """
         logger.info("Starting Neapolitan pizza dough calculation")
+
+        # Reset sensors
+        for sensor_id in self.reset_sensors:
+            await self._mqtt.reset_sensor(self.id, sensor_id)
         
         try:
             # Update progress

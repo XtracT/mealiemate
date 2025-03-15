@@ -179,6 +179,7 @@ See section 6 for detailed instructions on adding a new plugin.
 *   **Inheritance:** All plugins **must** inherit from the `core.plugin.Plugin` abstract base class.
 
 *   **Interface Implementation:** Plugins **must** implement all abstract methods defined in the `Plugin` base class (`id`, `get_plugin_id`, `name`, `description`, `execute`, `get_mqtt_entities`).
+*   **Sensor Reset:** Plugins can optionally define a `reset_sensors` attribute, which is a list of sensor IDs that should be reset when the plugin is initialized and every midnight.
 
 *   **Single Responsibility:** Each plugin should have a single, well-defined responsibility. Avoid creating plugins that do too many things.
 

@@ -67,7 +67,7 @@ class MealieMateApp:
         self._plugin_manager = PluginManager(self._registry, self._container, mqtt_service)
         
         # Create system service
-        self._system_service = SystemService(self._registry, self._container)
+        self._system_service = SystemService(self._registry, self._container, self._plugin_manager)
         
         # Create message handler
         self._message_handler = MqttMessageHandler(self._registry, self._container, self._plugin_manager)
@@ -104,12 +104,12 @@ class MealieMateApp:
         try:
             # Set up MQTT entities
             await self._system_service.setup_mqtt_entities()
-            
+
             # Reset all special sensors on startup
             logger.debug("Resetting special sensors on service startup")
             await mqtt_service.info("mealiemate", "Resetting special sensors on service startup", category="config")
             await self._system_service.reset_special_sensors()
-            
+
             # Start MQTT listener and message processor
             listener_task = asyncio.create_task(self._mqtt_listener())
             self._background_tasks.append(listener_task)
