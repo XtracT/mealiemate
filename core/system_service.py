@@ -137,8 +137,10 @@ class SystemService:
         await self._mqtt_service.setup_mqtt_service_status("mealiemate", "status", "MealieMate Status")
         await self._mqtt_service.success("mealiemate", "MQTT entity setup complete")
     
+
     async def reset_special_sensors(self) -> None:
         """Reset all special sensors (feedback, dough_recipe, current_suggestion) for all plugins."""
+        #TODO: This function should be done from the sensor configuration of each plugin
         if not self._mqtt_service:
             logger.error("MQTT service not found in container")
             return

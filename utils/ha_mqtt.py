@@ -403,10 +403,6 @@ async def log(
     if (script_id, sensor_id) not in log_buffers:
         logger.warning(f"Attempted to log to uninitialized sensor: {script_id}_{sensor_id}")
         return False
-    
-    # Always reset the buffer for specific sensors to avoid appending
-    if sensor_id in ["feedback", "dough_recipe", "current_suggestion"]:  # Excluding "mealplan" as requested
-        reset = True
         
     if reset:
         log_buffers[(script_id, sensor_id)] = ""

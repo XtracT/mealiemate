@@ -284,9 +284,9 @@ class ShoppingListGeneratorPlugin(Plugin):
         if feedback:
             await self._mqtt.warning(self.id, "\nGPT Feedback:")
             for issue in feedback:
-                await self._mqtt.warning(self.id, issue)
-                await self._mqtt.log(self.id, "feedback", issue)
-                logger.info(f"GPT Feedback: {issue}")
+               await self._mqtt.warning(self.id, issue)
+               await self._mqtt.log(self.id, "feedback", issue, reset=False)
+               logger.info(f"GPT Feedback: {issue}")
 
         return cleaned_list
 
