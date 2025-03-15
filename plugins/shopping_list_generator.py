@@ -275,15 +275,17 @@ class ShoppingListGeneratorPlugin(Plugin):
         # Log results
         await self._mqtt.success(self.id, f"Shopping list consolidated from {len(ingredients)} to {len(cleaned_list)} items.")
         logger.info(f"Shopping list consolidated from {len(ingredients)} to {len(cleaned_list)} items")
-        
+        await self._mqtt.log(self.id, "feedback", f"Shopping list consolidated from {len(ingredients)} to {len(cleaned_list)} items.", reset=False)
+
+
         # Log item merging details
-        await self._mqtt.info(self.id, "\nItem Merging Details:", category="data")
+        await self._mqtt.info(self.id, "\nItem Merging Details:")
         for item in cleaned_list:
             merged_str = ", ".join(item.get("merged_items", []))
             item_desc = f"{item['quantity']} {item['unit']} {item['name']} ({item['category']})"
             if merged_str:
                 item_desc += f"  <-  {merged_str}"
-            await self._mqtt.info(self.id, item_desc, category="data")
+            await self._mqtt.info(self.id, item_desc)
 
         # Log any feedback from GPT
         if feedback:
@@ -409,7 +411,6 @@ class ShoppingListGeneratorPlugin(Plugin):
             "shopping_list_items",
             "",  # No primary text needed
             reset=True,
-            category="data",
             extra_attributes=all_attributes
         )
 
@@ -498,7 +499,7 @@ class ShoppingListGeneratorPlugin(Plugin):
             if hasattr(self, switch_attr) and getattr(self, switch_attr):
                 self._selected_items.append(item)
                 logger.info(f"Added item to shopping list: {item['name']}")
-                await self._mqtt.info(self.id, f"Added to shopping list: {item['name']}", category="data")
+                await self._mqtt.info(self.id, f"Added to shopping list: {item['name']}")
         
         # Log the total number of selected items
         logger.info(f"Total items selected for shopping list: {len(self._selected_items)}")
@@ -541,7 +542,7 @@ class ShoppingListGeneratorPlugin(Plugin):
             
             # Log the date range and include today setting
             await self._mqtt.info(self.id, f"Include today: {self._include_today}", category="config")
-            await self._mqtt.info(self.id, f"Date range: {start_date} to {end_date}", category="data")
+            await self._mqtt.info(self.id, f"Date range: {start_date} to {end_date}")
             
             # Fetch meal plan
             await self._mqtt.update_progress(self.id, "progress", 10, "Fetching meal plan")
@@ -564,7 +565,7 @@ class ShoppingListGeneratorPlugin(Plugin):
                 await self._mqtt.update_progress(self.id, "progress", 100, "Finished - No recipes found in meal plan")
                 return
                 
-            await self._mqtt.info(self.id, f"Found {len(meal_plan_entries)} meal plan entries.", category="data")
+            await self._mqtt.info(self.id, f"Found {len(meal_plan_entries)} meal plan entries.")
             logger.info(f"Found {len(meal_plan_entries)} meal plan entries")
 
             # Process ingredients
@@ -577,7 +578,7 @@ class ShoppingListGeneratorPlugin(Plugin):
                 return
                 
             # Clean up shopping list
-            await self._mqtt.update_progress(self.id, "progress", 40, "Cleaning up shopping list with GPT")
+            await self._mqtt.update_progress(self.id, "progress", 40, f"Cleaning up / merging list of {len(raw_ingredients)} ingredients w/ GPT")
             self._cleaned_list = await self.clean_up_shopping_list(raw_ingredients)
             if not self._cleaned_list:
                 logger.warning("No items in cleaned shopping list")
