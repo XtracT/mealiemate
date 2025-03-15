@@ -112,6 +112,8 @@ class PluginManager:
         
         # Update switch state to OFF immediately when the user requests to stop the plugin
         await self._mqtt_service.set_switch_state(plugin_id, "OFF")
+
+
         
         # Cancel the task
         task = self._running_tasks.pop(plugin_id)
@@ -122,15 +124,19 @@ class PluginManager:
         except (asyncio.CancelledError, asyncio.TimeoutError):
             await self._mqtt_service.info(plugin_id, "Plugin cancelled or timed out during shutdown", category="stop")
         
-        # Reset progress sensor to 0 with "Stopped" activity when manually stopped
-        # Check if this plugin has a progress sensor by looking at its MQTT entities
+        # Reset progress sensors and others with "Stopped" activity when manually stopped
         plugin_cls = self._registry.get_plugin(plugin_id)
         if plugin_cls:
             plugin = self._container.inject(plugin_cls)
+
+            # Check if this plugin has a progress sensor by looking at its MQTT entities
             entities = plugin.get_mqtt_entities()
             if "sensors" in entities and "progress" in entities["sensors"]:
                 await self._mqtt_service.update_progress(plugin_id, "progress", 0, "Stopped")
         
+            # Reset plugin sensors
+            await self._reset_plugin_sensors(plugin)
+
         # Remove the plugin instance
         self._running_plugin_instances.pop(plugin_id, None)
         logger.debug(f"Removed plugin instance for {plugin_id} from running_plugin_instances")
