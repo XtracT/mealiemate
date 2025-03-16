@@ -445,8 +445,7 @@ class MealplanFetcherPlugin(Plugin):
 
     async def execute(self) -> None:
         # Reset sensors
-        for sensor_id in self.reset_sensors:
-            await self._mqtt.reset_sensor(self.id, sensor_id)
+        await self._mqtt.reset_sensor(self.id, "mealplan")
 
         """
         Main workflow:
