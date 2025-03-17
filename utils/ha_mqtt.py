@@ -292,14 +292,14 @@ async def setup_mqtt_button(script_id: str, button_id: str, button_name: str) ->
         logger.error(f"Failed to setup MQTT button '{button_name}': {str(e)}")
         return False
 
-async def setup_mqtt_service_status(script_id: str, sensor_id: str, sensor_name: str) -> bool:
+async def setup_mqtt_binary_sensor(script_id: str, sensor_id: str, sensor_name: str) -> bool:
     """
-    Register an MQTT binary sensor to indicate the service status in Home Assistant.
+    Register an MQTT binary sensor in Home Assistant.
     
     Args:
         script_id: Unique identifier for the script
-        sensor_id: Unique identifier for this specific status sensor (can be empty)
-        sensor_name: Human-readable name for the status sensor
+        sensor_id: Unique identifier for this specific binary sensor (can be empty)
+        sensor_name: Human-readable name for the binary sensor
         
     Returns:
         True if registration was successful, False otherwise
@@ -325,10 +325,10 @@ async def setup_mqtt_service_status(script_id: str, sensor_id: str, sensor_name:
             await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
             # Also publish initial state to ensure the entity is available immediately
             await client.publish(state_topic, "ON", retain=True)
-            logger.info(f"Registered MQTT service status: {sensor_name}")
+            logger.info(f"Registered MQTT binary sensor: {sensor_name}")
             return True
     except Exception as e:
-        logger.error(f"Failed to setup MQTT service status '{sensor_name}': {str(e)}")
+        logger.error(f"Failed to setup MQTT binary sensor '{sensor_name}': {str(e)}")
         return False
 
 async def log(

@@ -112,14 +112,14 @@ class MqttService(ABC):
         pass
     
     @abstractmethod
-    async def setup_mqtt_service_status(self, plugin_id: str, sensor_id: str, name: str) -> bool:
+    async def setup_mqtt_binary_sensor(self, plugin_id: str, sensor_id: str, name: str) -> bool:
         """
-        Register an MQTT binary sensor to indicate the service status in Home Assistant.
+        Register an MQTT binary sensor in Home Assistant.
         
         Args:
             plugin_id: Unique identifier for the plugin
-            sensor_id: Unique identifier for this specific status sensor
-            name: Human-readable name for the status sensor
+            sensor_id: Unique identifier for this specific binary sensor
+            name: Human-readable name for the binary sensor
             
         Returns:
             True if registration was successful, False otherwise

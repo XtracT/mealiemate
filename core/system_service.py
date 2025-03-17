@@ -138,7 +138,7 @@ class SystemService:
                 logger.error(f"Error setting up MQTT entities for plugin {plugin_id}: {str(e)}")
 
         # Set up overall service status indicator
-        await self._mqtt_service.setup_mqtt_service_status("mealiemate_status", "", "MealieMate Status")
+        await self._mqtt_service.setup_mqtt_binary_sensor("mealiemate_status", "", "MealieMate Status")
         await self._mqtt_service.success("mealiemate", "MQTT entity setup complete")
     
 
