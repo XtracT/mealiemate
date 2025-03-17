@@ -254,6 +254,20 @@ class MqttService(ABC):
             True if update was successful, False otherwise
         """
         pass
+    
+    @abstractmethod
+    async def set_binary_sensor_state(self, sensor_id: str, state: str) -> bool:
+        """
+        Set the state of a binary sensor in Home Assistant.
+        
+        Args:
+            sensor_id: ID of the binary sensor (e.g. script_id_sensor_id)
+            state: New state ("ON" or "OFF")
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        pass
 
 
 class MealieApiService(ABC):

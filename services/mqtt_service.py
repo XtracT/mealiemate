@@ -244,3 +244,16 @@ class MqttServiceImpl(MqttService):
             True if update was successful, False otherwise
         """
         return await ha_mqtt.set_switch_state(switch_id, state)
+        
+    async def set_binary_sensor_state(self, sensor_id: str, state: str) -> bool:
+        """
+        Set the state of a binary sensor in Home Assistant.
+        
+        Args:
+            sensor_id: ID of the binary sensor (e.g. script_id_sensor_id)
+            state: New state ("ON" or "OFF")
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        return await ha_mqtt.set_binary_sensor_state(sensor_id, state)

@@ -298,14 +298,15 @@ async def setup_mqtt_service_status(script_id: str, sensor_id: str, sensor_name:
     
     Args:
         script_id: Unique identifier for the script
-        sensor_id: Unique identifier for this specific status sensor
+        sensor_id: Unique identifier for this specific status sensor (can be empty)
         sensor_name: Human-readable name for the status sensor
         
     Returns:
         True if registration was successful, False otherwise
     """
     try:
-        unique_id = f"{script_id}_{sensor_id}"
+        # If sensor_id is empty, use script_id as the unique_id
+        unique_id = script_id if not sensor_id else f"{script_id}_{sensor_id}"
         state_topic = f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/{unique_id}/state"
         config_topic = f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/{unique_id}/config"
 
@@ -322,6 +323,8 @@ async def setup_mqtt_service_status(script_id: str, sensor_id: str, sensor_name:
 
         async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
             await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+            # Also publish initial state to ensure the entity is available immediately
+            await client.publish(state_topic, "ON", retain=True)
             logger.info(f"Registered MQTT service status: {sensor_name}")
             return True
     except Exception as e:
@@ -586,4 +589,26 @@ async def set_switch_state(switch_id: str, state: str) -> bool:
             return True
     except Exception as e:
         logger.error(f"Failed to set switch state for {switch_id}: {str(e)}")
+        return False
+
+async def set_binary_sensor_state(sensor_id: str, state: str) -> bool:
+    """
+    Set the state of a binary sensor in Home Assistant.
+    
+    Args:
+        sensor_id: ID of the binary sensor (e.g. script_id_sensor_id)
+        state: New state ("ON" or "OFF")
+        
+    Returns:
+        True if update was successful, False otherwise
+    """
+    try:
+        state_topic = f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/{sensor_id}/state"
+        
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(state_topic, payload=state, retain=True)
+            logger.debug(f"Set binary sensor state for {sensor_id} to {state}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to set binary sensor state for {sensor_id}: {str(e)}")
         return False

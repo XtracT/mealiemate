@@ -138,7 +138,7 @@ class SystemService:
                 logger.error(f"Error setting up MQTT entities for plugin {plugin_id}: {str(e)}")
 
         # Set up overall service status indicator
-        await self._mqtt_service.setup_mqtt_service_status("mealiemate", "status", "MealieMate Status")
+        await self._mqtt_service.setup_mqtt_service_status("mealiemate_status", "", "MealieMate Status")
         await self._mqtt_service.success("mealiemate", "MQTT entity setup complete")
     
 
@@ -231,7 +231,7 @@ class SystemService:
         while True:
             try:
                 # Send a heartbeat every hour
-                await self._mqtt_service.set_switch_state("mealiemate_status", "ON")
+                await self._mqtt_service.set_binary_sensor_state("mealiemate_status", "ON")
                 logger.debug("Sent status heartbeat to Home Assistant")
                 
                 # Wait for an hour before sending the next heartbeat

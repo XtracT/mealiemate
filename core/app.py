@@ -160,7 +160,7 @@ class MealieMateApp:
         
         # Set service status to OFF
         if mqtt_service:
-            await mqtt_service.set_switch_state("mealiemate_status", "OFF")
+            await mqtt_service.set_binary_sensor_state("mealiemate_status", "OFF")
             await mqtt_service.info("mealiemate", "Published offline status to MQTT", category="network")
         
         # Stop system service tasks
