@@ -51,7 +51,7 @@ class RecipeTaggerPlugin(Plugin):
         self._available_tags = {
             "Main Ingredient Category": [
                 "Red Meat", "Poultry", "Fish", "Seafood", "Eggs", "Dairy",
-                "Legumes", "Grains", "Vegetables", "Fruits", "Mushrooms"
+                "Legumes", "Grains", "Vegetables", "Fruits", "Mushrooms", "Nuts"
             ],
             "Nutritional Profile and Dietary Preferences": [
                 "Normal", "Vegetarian", "Vegan", "High Protein", "Low Carb",
