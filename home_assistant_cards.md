@@ -296,11 +296,11 @@ cards:
       style:
         hui-horizontal-stack-card $: |
           div#root > :first-child > * {
-            width: 40%;
+            width: 65%;
             flex: auto; 
           }
           div#root > :last-child > * {
-            width: 60%;
+            width: 35%;
             flex: auto; 
           }
     card:
@@ -318,13 +318,31 @@ cards:
             {% else %}
               grey
             {% endif %}
+          secondary: |-
+            {% if is_state('switch.mealiemate_from_today', 'on') %}
+              Including today
+            {% else %}
+              Starting tomorrow
+            {% endif %}
+          hold_action:
+            action: call-service
+            service: switch.toggle
+            target:
+              entity_id: switch.switch.mealiemate_from_today
+            data: {}
+          double_tap_action:
+            action: call-service
+            service: switch.toggle
+            target:
+              entity_id: switch.switch.mealiemate_from_today
+            data: {}
         - type: custom:mushroom-number-card
           entity: number.mealiemate_fetcher_days
           name: Days
-          icon: mdi:calendar-range
+          icon_type: none
           display_mode: buttons
           secondary_info: none
-          fill: true
+          fill_container: true
           layout: horizontal
   - type: custom:mod-card
     card_mod:

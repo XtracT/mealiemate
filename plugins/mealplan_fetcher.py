@@ -2,7 +2,7 @@
 Module: mealplan_fetcher
 ------------------------
 This module performs the following tasks:
-  1. Fetches the upcoming meal plan (next 7 days, skipping today) from Mealie.
+  1. Fetches the upcoming meal plan (next 7 days, optionally including today) from Mealie.
   2. Logs the meal plan in Markdown format via MQTT.
   3. Generates a 480x800 PNG image of the meal plan.
   4. Sends the generated image directly to a Telegram chat using credentials loaded from a .env file.
@@ -15,6 +15,7 @@ Requirements:
 Configuration:
   - Font files are stored in the 'fonts' directory at the project root.
   - Set environment variables in .env file (see README.md for details).
+  - Use the "from_today" switch to determine whether to start the meal plan from today or tomorrow.
 """
 
 import os
@@ -50,6 +51,7 @@ class MealplanFetcherPlugin(Plugin):
         # Configuration
         self._num_days = 7
         self._mealie_url = "https://mealie.domain.com"
+        self._from_today = False  # Default to not including today (start from tomorrow)
         
         # Global constant for output image name (used for logging only; image is sent in-memory)
         self._output_image_name = "weekly_meal_plan.png"
@@ -124,6 +126,9 @@ class MealplanFetcherPlugin(Plugin):
             "numbers": {
                 "num_days": {"id": "num_days", "name": "Fetcher Days", "value": self._num_days}
             },
+            "switches": {
+                "from_today": {"id": "from_today", "name": "From Today", "value": self._from_today}
+            },
             "texts": {
                 "mealie_url": {
                     "id": "mealie_url",
@@ -191,7 +196,7 @@ class MealplanFetcherPlugin(Plugin):
     def get_meal_data(self, mealplan: Dict[str, Dict[str, Dict]], num_days: int = 7) -> Tuple[List[str], List[str], List[str]]:
         """
         Extract day names, lunch and dinner data from the meal plan.
-        Skips today and fetches the following 7 days.
+        Starts from today or tomorrow based on the from_today setting.
         
         Args:
             mealplan: Dictionary of meal plan entries
@@ -200,11 +205,12 @@ class MealplanFetcherPlugin(Plugin):
         Returns:
             Tuple of (day_names, lunches, dinners) lists
         """
-        tomorrow = datetime.today().date() + timedelta(days=1)
+        start_offset = 0 if self._from_today else 1
+        start_date = datetime.today().date() + timedelta(days=start_offset)
         day_names, lunches, dinners = [], [], []
 
         for i in range(num_days):
-            current_date = tomorrow + timedelta(days=i)
+            current_date = start_date + timedelta(days=i)
             weekday_name = current_date.strftime("%A").upper()
             day_str = current_date.strftime("%Y-%m-%d")
             
@@ -460,10 +466,15 @@ class MealplanFetcherPlugin(Plugin):
         num_days = self._num_days
         mealie_url = self._mealie_url
 
-        # Determine date range - skip today, get the next 7 days
-        tomorrow = datetime.today().date() + timedelta(days=1)
-        start_date = tomorrow.strftime("%Y-%m-%d")
-        end_date = (tomorrow + timedelta(days=num_days - 1)).strftime("%Y-%m-%d")
+        # Determine date range based on from_today setting
+        start_offset = 0 if self._from_today else 1
+        start_date_obj = datetime.today().date() + timedelta(days=start_offset)
+        start_date = start_date_obj.strftime("%Y-%m-%d")
+        end_date = (start_date_obj + timedelta(days=num_days - 1)).strftime("%Y-%m-%d")
+        
+        # Log the date range and include today setting
+        await self._mqtt.info(self.id, f"Include today: {self._from_today}", category="config")
+        await self._mqtt.info(self.id, f"Date range: {start_date} to {end_date}")
 
         # Fetch meal plan from Mealie
         await self._mqtt.info(self.id, "Fetching meal plan from Mealie...", category="data")
