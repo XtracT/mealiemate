@@ -26,24 +26,6 @@ MealieMate is a collection of Python scripts bundled in a service that integrate
 6. **Neapolitan Pizza Calculator**  
    Calculates precise dough ingredients and fermentation schedules for Neapolitan-style pizza based on temperature and time parameters. Uses a scientific approach to adjust yeast quantities for consistent results.
 
----
-
-## Technical Improvements
-
-The codebase has been enhanced with several improvements:
-
-- **Plugin Architecture**: Modular plugin system that allows for easy extension and maintenance. Each feature is implemented as a plugin with a clear interface.
-- **Dependency Injection**: Service interfaces and a dependency injection container for better testability and loose coupling between components.
-- **Type Hints**: Comprehensive type annotations throughout the codebase for better IDE support and static type checking.
-- **Error Handling**: Robust error handling with specific error messages and appropriate fallbacks.
-- **Logging**: Structured logging system for easier debugging and monitoring.
-- **Code Organization**: Modular design with clear separation of concerns:
-  - `core/`: Core interfaces and infrastructure
-  - `plugins/`: Feature implementations as plugins
-  - `services/`: Service implementations
-  - `utils/`: Utility functions and helpers
-- **Documentation**: Enhanced docstrings with detailed parameter descriptions and return value information.
-- **Performance**: Optimized code for better performance and resource usage.
 
 ---
 
@@ -156,5 +138,4 @@ This project is licensed under the MIT License.
 
 - To the Mealie community for their awesome recipe manager.
 - To Home Assistant for making smart home integrations so powerful and flexible.
-- To OpenAI for providing the GPT models that power the intelligent features.
 - And to all contributors who help make open-source projects thrive!
