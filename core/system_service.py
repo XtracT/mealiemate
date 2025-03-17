@@ -62,12 +62,8 @@ class SystemService:
         # Set up entities for each plugin
         for plugin_id, plugin_cls in self._registry.get_all_plugins().items():
             try:
-                # Create plugin instance with dependencies injected
-                plugin = self._container.inject(plugin_cls)
-                
-                # Apply any stored configuration to the plugin instance
-                # This ensures we use the latest values from retained messages
-                self._plugin_manager.apply_config_to_plugin(plugin)
+                # Get or create plugin instance (with configuration already applied)
+                plugin = self._plugin_manager.get_or_create_instance(plugin_id)
                 
                 # Get MQTT entity configuration from the plugin
                 entities = plugin.get_mqtt_entities()

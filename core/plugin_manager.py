@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 class PluginManager:
     """Manages plugin lifecycle and configuration."""
-    
     def __init__(self, registry: PluginRegistry, container: Container, mqtt_service: MqttService):
         """
         Initialize the PluginManager.
@@ -43,6 +42,10 @@ class PluginManager:
         # Track running tasks, plugin instances, and configurations
         self._running_tasks: Dict[str, asyncio.Task] = {}
         self._running_plugin_instances: Dict[str, Plugin] = {}
+        self._plugin_configs: Dict[str, Dict[str, Any]] = {}
+        
+        # Track all plugin instances (both running and non-running)
+        self._plugin_instances: Dict[str, Plugin] = {}
         self._plugin_configs: Dict[str, Dict[str, Any]] = {}
     
     async def start_plugin(self, plugin_id: str) -> bool:
@@ -62,25 +65,15 @@ class PluginManager:
             
         await self._mqtt_service.info(plugin_id, "Starting plugin", category="start")
         
-        # Get the plugin class from the registry
-        plugin_cls = self._registry.get_plugin(plugin_id)
-        if not plugin_cls:
-            logger.error(f"Plugin {plugin_id} not found in registry")
-            await self._mqtt_service.error(plugin_id, f"Plugin {plugin_id} not found")
-            return False
-            
-        # Create plugin instance with dependencies injected
+        # Get or create the plugin instance
         try:
-            plugin = self._container.inject(plugin_cls)
+            plugin = self.get_or_create_instance(plugin_id)
             
-            # Apply any stored configuration values to the plugin
-            self.apply_config_to_plugin(plugin)
-
             # Reset plugin sensors
             await self._reset_plugin_sensors(plugin)
         except Exception as e:
-            logger.error(f"Error creating plugin instance for {plugin_id}: {str(e)}")
-            await self._mqtt_service.error(plugin_id, f"Error creating plugin instance: {str(e)}")
+            logger.error(f"Error getting plugin instance for {plugin_id}: {str(e)}")
+            await self._mqtt_service.error(plugin_id, f"Error getting plugin instance: {str(e)}")
             return False
         
         # Store the plugin instance and create task for the plugin
@@ -137,9 +130,11 @@ class PluginManager:
             # Reset plugin sensors
             await self._reset_plugin_sensors(plugin)
 
-        # Remove the plugin instance
+        # Remove the plugin instance from running instances
         self._running_plugin_instances.pop(plugin_id, None)
         logger.debug(f"Removed plugin instance for {plugin_id} from running_plugin_instances")
+        
+        # Note: We don't remove from _plugin_instances to maintain the instance for future use
         
         return True
 
@@ -198,6 +193,8 @@ class PluginManager:
             self._running_tasks.pop(plugin_id, None)
             self._running_plugin_instances.pop(plugin_id, None)
             logger.debug(f"Removed plugin instance for {plugin_id} from running_plugin_instances")
+            
+            # Note: We don't remove from _plugin_instances to maintain the instance for future use
     
     def is_plugin_running(self, plugin_id: str) -> bool:
         """
@@ -252,14 +249,14 @@ class PluginManager:
         self._plugin_configs[plugin_id][attr_name] = value
         logger.debug(f"Stored config for {plugin_id}: {attr_name}={value}")
         
-        # If the plugin is currently running, update its configuration
-        if plugin_id in self._running_plugin_instances:
-            plugin = self._running_plugin_instances[plugin_id]
+        # Update the plugin instance if it exists (running or non-running)
+        if plugin_id in self._plugin_instances:
+            plugin = self._plugin_instances[plugin_id]
             if hasattr(plugin, attr_name):
                 setattr(plugin, attr_name, value)
-                logger.debug(f"Updated running plugin instance {plugin_id} attribute {attr_name} to {value}")
+                logger.debug(f"Updated plugin instance {plugin_id} attribute {attr_name} to {value}")
             else:
-                logger.warning(f"Running plugin instance {plugin_id} has no attribute {attr_name}")
+                logger.warning(f"Plugin instance {plugin_id} has no attribute {attr_name}")
     
     def get_plugin_config(self, plugin_id: str, attr_name: str) -> Optional[Any]:
         """
@@ -288,6 +285,53 @@ class PluginManager:
         """
         return self._plugin_configs.get(plugin_id, {})
     
+    def get_or_create_instance(self, plugin_id: str) -> Plugin:
+        """
+        Get an existing plugin instance or create a new one if it doesn't exist.
+        
+        Args:
+            plugin_id: ID of the plugin
+            
+        Returns:
+            The plugin instance
+            
+        Raises:
+            ValueError: If the plugin ID is not found in the registry
+        """
+        # Return existing instance if available
+        if plugin_id in self._plugin_instances:
+            logger.debug(f"Using existing plugin instance for {plugin_id}, object ID: {id(self._plugin_instances[plugin_id])}")
+            return self._plugin_instances[plugin_id]
+            
+        # Get the plugin class from the registry
+        plugin_cls = self._registry.get_plugin(plugin_id)
+        if not plugin_cls:
+            raise ValueError(f"Plugin {plugin_id} not found in registry")
+            
+        # Create plugin instance with dependencies injected
+        plugin = self._container.inject(plugin_cls)
+        
+        # Apply any stored configuration values to the plugin
+        self.apply_config_to_plugin(plugin)
+        
+        # Store the instance
+        self._plugin_instances[plugin_id] = plugin
+        logger.debug(f"Created and stored plugin instance for {plugin_id}, object ID: {id(plugin)}")
+        
+        return plugin
+        
+    def reset_instance(self, plugin_id: str) -> None:
+        """
+        Reset a plugin instance by removing it from the instances dictionary.
+        The next call to get_or_create_instance will create a fresh instance.
+        
+        Args:
+            plugin_id: ID of the plugin to reset
+        """
+        if plugin_id in self._plugin_instances:
+            del self._plugin_instances[plugin_id]
+            logger.debug(f"Reset plugin instance for {plugin_id}")
+            
     def get_running_plugin_instance(self, plugin_id: str) -> Optional[Plugin]:
         """
         Get a running plugin instance by ID.

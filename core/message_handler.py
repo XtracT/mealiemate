@@ -108,10 +108,9 @@ class MqttMessageHandler:
             elif payload == "OFF":
                 await self._plugin_manager.stop_plugin(plugin_id)
         else:  # Additional plugin switches
-            # Create plugin instance with dependencies injected
+            # Get or create plugin instance
             try:
-                plugin_cls = self._registry.get_plugin(plugin_id)
-                plugin = self._container.inject(plugin_cls)
+                plugin = self._plugin_manager.get_or_create_instance(plugin_id)
                 entities = plugin.get_mqtt_entities()
 
                 # Find the switch in the switches dictionary
@@ -125,13 +124,8 @@ class MqttMessageHandler:
                                 value = payload == "ON"
 
                                 # Store in persistent configuration
+                                # This will also update the plugin instance via the plugin manager
                                 self._plugin_manager.store_plugin_config(plugin_id, attr_name, value)
-                                
-                                # Also update the plugin instance directly if it's not running
-                                # (Running instances are updated by store_plugin_config)
-                                if not self._plugin_manager.is_plugin_running(plugin_id):
-                                    setattr(plugin, attr_name, value)
-                                    logger.debug(f"Updated non-running plugin instance {plugin_id} attribute {attr_name} to {value}")
 
                                 # Update the switch state in Home Assistant
                                 await self._mqtt_service.set_switch_state(f"{plugin_id}_{entity_id}", payload)
@@ -159,9 +153,8 @@ class MqttMessageHandler:
             payload: New value
         """
         try:
-            # Create plugin instance with dependencies injected
-            plugin_cls = self._registry.get_plugin(plugin_id)
-            plugin = self._container.inject(plugin_cls)
+            # Get or create plugin instance
+            plugin = self._plugin_manager.get_or_create_instance(plugin_id)
             
             # Check if this is a float type number
             entities = plugin.get_mqtt_entities()
@@ -183,13 +176,8 @@ class MqttMessageHandler:
             attr_name = f"_{entity_id}"
             if hasattr(plugin, attr_name):
                 # Store in persistent configuration
+                # This will also update the plugin instance via the plugin manager
                 self._plugin_manager.store_plugin_config(plugin_id, attr_name, value)
-                
-                # Also update the plugin instance directly if it's not running
-                # (Running instances are updated by store_plugin_config)
-                if not self._plugin_manager.is_plugin_running(plugin_id):
-                    setattr(plugin, attr_name, value)
-                    logger.debug(f"Updated non-running plugin instance {plugin_id} attribute {attr_name} to {value}")
 
                 await self._mqtt_service.info(plugin_id, f"Updated number {entity_id} to {value}", category="data")
             else:
@@ -213,9 +201,8 @@ class MqttMessageHandler:
             payload: New text value
         """
         try:
-            # Create plugin instance with dependencies injected
-            plugin_cls = self._registry.get_plugin(plugin_id)
-            plugin = self._container.inject(plugin_cls)
+            # Get or create plugin instance
+            plugin = self._plugin_manager.get_or_create_instance(plugin_id)
             
             # Update the plugin's configuration
             text = str(payload)
@@ -225,13 +212,8 @@ class MqttMessageHandler:
             attr_name = f"_{entity_id}"
             if hasattr(plugin, attr_name):
                 # Store in persistent configuration
+                # This will also update the plugin instance via the plugin manager
                 self._plugin_manager.store_plugin_config(plugin_id, attr_name, text)
-                
-                # Also update the plugin instance directly if it's not running
-                # (Running instances are updated by store_plugin_config)
-                if not self._plugin_manager.is_plugin_running(plugin_id):
-                    setattr(plugin, attr_name, text)
-                    logger.debug(f"Updated non-running plugin instance {plugin_id} attribute {attr_name} to {text}")
 
                 await self._mqtt_service.info(plugin_id, f"Updated text {entity_id} to: {text[:30]}...", category="data")
             else:
