@@ -56,7 +56,7 @@ The Mealplan Fetcher can send generated meal plan images directly to a Telegram 
 
 ## Home Assistant Configuration
 
-For detailed YAML configurations to set up your Home Assistant dashboard with MealieMate, refer to the [Home Assistant Cards](home_assistant_cards.md) documentation.
+For detailed YAML configurations to set up your Home Assistant dashboard with MealieMate, refer to the [Home Assistant Cards](doc/home_assistant_cards.md) documentation.
 
 
 ### Docker-compose
@@ -121,6 +121,8 @@ Contributions are welcome! Here's how you can help:
 - Ensure your code follows the project's style and includes appropriate tests.
 - Add or update documentation as necessary.
 - Open a Pull Request with a clear description of changes.
+
+You can refer to the [archictecture](doc/architecture.md) for further clarification of how Mealiemate is designed. 
 
 Areas for improvement:
 
