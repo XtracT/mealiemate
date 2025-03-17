@@ -102,7 +102,18 @@ class MealieMateApp:
             return
             
         try:
-            # Set up MQTT entities
+            # First, connect to MQTT and receive any retained messages
+            await mqtt_service.info("mealiemate", "Connecting to MQTT broker and processing retained messages", category="start")
+            
+            try:
+                # Process retained messages before setting up MQTT entities
+                await self._process_retained_messages()
+            except Exception as e:
+                logger.error(f"Error processing retained messages: {str(e)}", exc_info=True)
+                await mqtt_service.error("mealiemate", f"Error processing retained messages: {str(e)}")
+                # Continue with startup even if retained message processing fails
+            
+            # Now set up MQTT entities with the updated configuration
             await self._system_service.setup_mqtt_entities()
 
             # Reset all special sensors on startup
@@ -110,7 +121,7 @@ class MealieMateApp:
             await mqtt_service.info("mealiemate", "Resetting special sensors on service startup", category="config")
             await self._system_service.reset_special_sensors()
 
-            # Start MQTT listener and message processor
+            # Start the regular MQTT listener and message processor
             listener_task = asyncio.create_task(self._mqtt_listener())
             self._background_tasks.append(listener_task)
             
@@ -178,6 +189,82 @@ class MealieMateApp:
         
         if mqtt_service:
             await mqtt_service.success("mealiemate", "MealieMate service shutdown complete")
+    
+    async def _process_retained_messages(self) -> None:
+        """
+        Connect to MQTT and process any retained messages before setting up entities.
+        This ensures that any previously configured values are loaded before
+        publishing default values.
+        """
+        mqtt_service = self._container.resolve(MqttService)
+        if not mqtt_service:
+            logger.error("MQTT service not found in container")
+            return
+        
+        # Get MQTT broker and port from environment variables
+        mqtt_broker = os.getenv("MQTT_BROKER")
+        mqtt_port = int(os.getenv("MQTT_PORT", 1883))
+        mqtt_discovery_prefix = "homeassistant"
+        
+        if not mqtt_broker:
+            logger.error("MQTT_BROKER not found in environment variables")
+            return
+        
+        try:
+            import aiomqtt
+            
+            # Define a timeout for initial message processing
+            timeout_seconds = 5
+            
+            # Track message count
+            message_count = 0
+            
+            # Use the async context manager with a short timeout
+            async with aiomqtt.Client(mqtt_broker, mqtt_port, timeout=5) as client:
+                # Subscribe to control topics with QoS=1 to ensure delivery
+                await client.subscribe(f"{mqtt_discovery_prefix}/switch/+/set", qos=1)
+                await client.subscribe(f"{mqtt_discovery_prefix}/number/+/set", qos=1)
+                await client.subscribe(f"{mqtt_discovery_prefix}/text/+/set", qos=1)
+                
+                logger.info("Subscribed to MQTT control topics for retained message processing")
+                
+                # Add a small delay to allow retained messages to be received
+                await asyncio.sleep(1)
+                
+                # Process messages with a timeout
+                start_time = asyncio.get_event_loop().time()
+                
+                # Simple approach: just process messages for a fixed time
+                while True:
+                    # Check if we've been running too long
+                    current_time = asyncio.get_event_loop().time()
+                    if current_time - start_time > timeout_seconds:
+                        logger.info(f"Reached timeout after {timeout_seconds} seconds")
+                        break
+                    
+                    try:
+                        # Try to get a message with a short timeout
+                        message = await asyncio.wait_for(client.messages.__anext__(), timeout=0.5)
+                        topic = str(message.topic)
+                        payload = message.payload.decode()
+                        logger.info(f"Received retained MQTT message: {topic} = {payload}")
+                        
+                        # Process the message
+                        await self._message_handler.process_message(topic, payload)
+                        message_count += 1
+                    except asyncio.TimeoutError:
+                        # No message received within timeout, we might be done
+                        logger.debug("No more messages received in the last 0.5 seconds, exiting")
+                        break
+                    except Exception as e:
+                        logger.error(f"Error processing message: {str(e)}")
+                        # Continue with next message
+            
+            logger.info(f"Processed {message_count} retained messages")
+            await mqtt_service.info("mealiemate", f"Processed {message_count} retained MQTT messages", category="config")
+        
+        except Exception as e:
+            logger.error(f"Error in retained message processing: {str(e)}")
     
     async def _mqtt_listener(self) -> None:
         """

@@ -65,6 +65,10 @@ class SystemService:
                 # Create plugin instance with dependencies injected
                 plugin = self._container.inject(plugin_cls)
                 
+                # Apply any stored configuration to the plugin instance
+                # This ensures we use the latest values from retained messages
+                self._plugin_manager.apply_config_to_plugin(plugin)
+                
                 # Get MQTT entity configuration from the plugin
                 entities = plugin.get_mqtt_entities()
                 
@@ -97,11 +101,22 @@ class SystemService:
                     step = number.get("step", 1)
                     unit = number.get("unit", "")
                     
+                    # Get the current value from the plugin instance
+                    # This will reflect any retained messages that were processed
+                    attr_name = f"_{number_id}"
+                    current_value = getattr(plugin, attr_name, number["value"]) if hasattr(plugin, attr_name) else number["value"]
+                    
+                    # Log the value we're using (default or from configuration)
+                    if hasattr(plugin, attr_name):
+                        logger.debug(f"Setting up number {plugin.id}_{number_id} with configured value {current_value}")
+                    else:
+                        logger.debug(f"Setting up number {plugin.id}_{number_id} with default value {current_value}")
+                    
                     await self._mqtt_service.setup_mqtt_number(
-                        plugin.id, 
-                        number["id"], 
+                        plugin.id,
+                        number["id"],
                         number["name"],
-                        number["value"],
+                        current_value,  # Use current value from plugin instance
                         min_value,
                         max_value,
                         step,
@@ -110,11 +125,22 @@ class SystemService:
 
                 # Set up text inputs for plugin configuration
                 for text_id, text in entities.get("texts", {}).items():
+                    # Get the current value from the plugin instance
+                    # This will reflect any retained messages that were processed
+                    attr_name = f"_{text_id}"
+                    current_value = getattr(plugin, attr_name, text["text"]) if hasattr(plugin, attr_name) else text["text"]
+                    
+                    # Log the value we're using (default or from configuration)
+                    if hasattr(plugin, attr_name):
+                        logger.debug(f"Setting up text {plugin.id}_{text_id} with configured value {current_value}")
+                    else:
+                        logger.debug(f"Setting up text {plugin.id}_{text_id} with default value {current_value}")
+                    
                     await self._mqtt_service.setup_mqtt_text(
-                        plugin.id, 
-                        text["id"], 
+                        plugin.id,
+                        text["id"],
                         text["name"],
-                        text["text"]
+                        current_value  # Use current value from plugin instance
                     )
                     
                 # Set up buttons for plugin interaction
@@ -128,10 +154,25 @@ class SystemService:
                     
                 # Set up additional switches for plugin configuration
                 for switch_id, switch in entities.get("switches", {}).items():
+                    # Get the current value from the plugin instance
+                    attr_name = f"_{switch_id}"
+                    current_value = getattr(plugin, attr_name, switch.get("value", False)) if hasattr(plugin, attr_name) else switch.get("value", False)
+                    
+                    # Log the value we're using (default or from configuration)
+                    if hasattr(plugin, attr_name):
+                        logger.debug(f"Setting up switch {plugin.id}_{switch_id} with configured value {current_value}")
+                    else:
+                        logger.debug(f"Setting up switch {plugin.id}_{switch_id} with default value {current_value}")
+                    
+                    # First set up the switch entity
                     await self._mqtt_service.setup_mqtt_switch(
                         f"{plugin.id}_{switch['id']}",
                         switch["name"]
                     )
+                    
+                    # Then set its state based on the current value
+                    state = "ON" if current_value else "OFF"
+                    await self._mqtt_service.set_switch_state(f"{plugin.id}_{switch['id']}", state)
                     
                 logger.debug(f"Set up MQTT entities for plugin: {plugin.id}")
             except Exception as e:
