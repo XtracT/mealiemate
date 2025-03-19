@@ -162,7 +162,7 @@ class NeapolitanPizzaPlugin(Plugin):
                     "value": self._total_time,
                     "type": "int",
                     "min": 1,
-                    "max": 48,
+                    "max": 50,
                     "step": 1,
                     "unit": "h"
                 }
