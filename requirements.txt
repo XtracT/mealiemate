@@ -10,8 +10,6 @@ openai>=1.0.0
 # Image processing
 Pillow>=10.0.0
 
-# Telegram integration
-python-telegram-bot>=20.4
 
 # Logging and monitoring
 structlog>=23.1.0

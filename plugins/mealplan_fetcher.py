@@ -3,13 +3,13 @@ Module: mealplan_fetcher
 ------------------------
 This module performs the following tasks:
   1. Fetches the upcoming meal plan (next 7 days, optionally including today) from Mealie.
-  2. Logs the meal plan in Markdown format via MQTT.
+  2. Logs the meal plan in Markdown format via MQTT sensor attributes.
   3. Generates a 480x800 PNG image of the meal plan.
-  4. Sends the generated image directly to a Telegram chat using credentials loaded from a .env file.
+  4. Publishes the generated image bytes to a dedicated MQTT topic for consumption
+     by Home Assistant's MQTT Image entity or other services.
 
 Requirements:
   - python-dotenv
-  - python-telegram-bot
   - Pillow
 
 Configuration:
@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any
 
 from PIL import Image, ImageDraw, ImageFont
-from telegram import Bot
 
 from core.plugin import Plugin
 from core.services import MqttService, MealieApiService
@@ -56,9 +55,14 @@ class MealplanFetcherPlugin(Plugin):
         # Global constant for output image name (used for logging only; image is sent in-memory)
         self._output_image_name = "weekly_meal_plan.png"
         
-        # Load environment variables
-        self._bot_token = os.getenv("TG_BOT_TOKEN")
-        self._bot_chat_id = os.getenv("TG_BOT_CHAT_ID")
+        # MQTT Image Entity Configuration
+        self._image_entity_id = "mealplan_image"
+        self._image_entity_name = "Meal Plan Image"
+        # Construct the topic based on plugin ID and image entity ID
+        self._image_topic = f"mealiemate/{self.id}/{self._image_entity_id}/image"
+        self._image_publish_enabled = True # Always enabled for now
+        logger.info(f"Image publishing enabled. Topic: {self._image_topic}")
+        
         
         # Image generation constants
         self._image_config = {
@@ -135,8 +139,12 @@ class MealplanFetcherPlugin(Plugin):
                     "name": "Mealie URL",
                     "text": self._mealie_url
                 }
+            },
+            # Add the new image entity definition here
+            "images": {
+                self._image_entity_id: {"id": self._image_entity_id, "name": self._image_entity_name}
             }
-        }
+        } # End of the main dictionary
     
     def generate_markdown_table(self, mealplan: Dict[str, Dict[str, Dict]], mealie_url: str) -> str:
         """
@@ -415,50 +423,16 @@ class MealplanFetcherPlugin(Plugin):
         logger.info("Meal plan image generated in memory")
         return rotated_img
 
-    async def send_telegram_image(
-        self,
-        bot_token: str, 
-        chat_id: str, 
-        image_obj: Image.Image, 
-        caption: str = "Weekly Meal Plan"
-    ) -> bool:
-        """
-        Sends an in-memory PIL Image object as a PNG file to a Telegram chat.
-        
-        Args:
-            bot_token: Telegram bot token
-            chat_id: Telegram chat ID
-            image_obj: Image to send
-            caption: Caption for the image
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        if not bot_token or not chat_id:
-            logger.warning("Telegram token or chat ID not provided in .env. Skipping Telegram send.")
-            return False
-        try:
-            bot = Bot(token=bot_token)
-            buffer = BytesIO()
-            image_obj.save(buffer, format="PNG")
-            buffer.seek(0)
-            await bot.send_photo(chat_id=chat_id, photo=buffer, caption=caption)
-            logger.info("Telegram image sent successfully!")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send Telegram image: {e}")
-            return False
-
     async def execute(self) -> None:
         # Reset sensors
         await self._mqtt.reset_sensor(self.id, "mealplan")
 
         """
         Main workflow:
-          1. Fetch meal plan from Mealie (7 days).
+          1. Fetch meal plan from Mealie.
           2. Log the meal plan in Markdown format via MQTT.
           3. Generate a rotated PNG image (in memory) of the meal plan.
-          4. Send the PNG image via Telegram (if credentials are provided).
+          4. Publish the PNG image bytes via MQTT to the configured topic.
         """
         # Update progress
         await self._mqtt.update_progress(self.id, "progress", 0, "Starting meal plan fetch")
@@ -498,26 +472,37 @@ class MealplanFetcherPlugin(Plugin):
         # Generate Markdown table and log via MQTT
         await self._mqtt.update_progress(self.id, "progress", 40, "Generating markdown table")
         mealplan_markdown = self.generate_markdown_table(mealplan, mealie_url)
-        await self._mqtt.log(self.id, "mealplan", mealplan_markdown, category="data")
-        await self._mqtt.success(self.id, "Meal plan fetched and logged.")
+        await self._mqtt.log(self.id, "mealplan", mealplan_markdown, reset=True) # Ensure reset=True for sensor
 
-        # Generate the PNG image (in memory)
-        await self._mqtt.info(self.id, "Generating meal plan image...", category="progress")
-        await self._mqtt.update_progress(self.id, "progress", 60, "Generating meal plan image")
-        image_obj = self.generate_mealplan_png(mealplan)
+        # Generate and Publish PNG image via MQTT
+        if self._image_publish_enabled:
+            await self._mqtt.update_progress(self.id, "progress", 60, "Generating meal plan image")
+            try:
+                image = self.generate_mealplan_png(mealplan)
+                
+                await self._mqtt.update_progress(self.id, "progress", 80, "Publishing image via MQTT")
+                
+                # Convert image to bytes
+                img_byte_arr = BytesIO()
+                image.save(img_byte_arr, format='PNG')
+                image_bytes = img_byte_arr.getvalue()
+                
+                # Publish image bytes
+                publish_success = await self._mqtt.publish_mqtt_image(self._image_topic, image_bytes)
+                
+                if publish_success:
+                    await self._mqtt.success(self.id, f"Meal plan image published successfully to {self._image_topic}")
+                    await self._mqtt.update_progress(self.id, "progress", 100, "Finished (Image Published)")
+                else:
+                    await self._mqtt.error(self.id, f"Failed to publish meal plan image to {self._image_topic}")
+                    await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Image publish failed")
 
-        # Send the image via Telegram
-        if self._bot_token and self._bot_chat_id:
-            await self._mqtt.info(self.id, "Sending meal plan image to Telegram...", category="network")
-            await self._mqtt.update_progress(self.id, "progress", 80, "Sending meal plan image to Telegram")
-            success = await self.send_telegram_image(self._bot_token, self._bot_chat_id, image_obj, "Weekly Meal Plan")
-            if success:
-                await self._mqtt.success(self.id, "Meal plan image sent to Telegram successfully.")
-                await self._mqtt.update_progress(self.id, "progress", 100, "Finished")
-            else:
-                await self._mqtt.error(self.id, "Failed to send meal plan image to Telegram.")
-                await self._mqtt.update_progress(self.id, "progress", 100, "Finished with errors")
+            except Exception as e:
+                logger.exception("Error generating or publishing meal plan image") # Log full traceback
+                await self._mqtt.error(self.id, f"Error generating or publishing meal plan image: {e}")
+                await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Image generation/publish failed")
+                # No return here, allow finishing if markdown was logged
         else:
-            await self._mqtt.warning(self.id, "Telegram credentials not provided. Skipping image send.")
-            await self._mqtt.update_progress(self.id, "progress", 100, "Finished - Telegram send skipped")
+            await self._mqtt.warning(self.id, "Image publishing is disabled.")
+            await self._mqtt.update_progress(self.id, "progress", 100, "Finished (Image Publishing Disabled)")
 

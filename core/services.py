@@ -8,7 +8,7 @@ enabling dependency injection and making it easier to test plugins in isolation.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 
 class MqttService(ABC):
     """Interface for MQTT service."""
@@ -120,6 +120,22 @@ class MqttService(ABC):
             plugin_id: Unique identifier for the plugin
             sensor_id: Unique identifier for this specific binary sensor
             name: Human-readable name for the binary sensor
+            
+        Returns:
+            True if registration was successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    async def setup_mqtt_image(self, plugin_id: str, image_id: str, name: str, image_topic: str) -> bool:
+        """
+        Register an MQTT image entity in Home Assistant.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            image_id: Unique identifier for this specific image entity
+            name: Human-readable name for the image entity
+            image_topic: The topic where the image bytes will be published
             
         Returns:
             True if registration was successful, False otherwise
@@ -266,6 +282,22 @@ class MqttService(ABC):
             
         Returns:
             True if update was successful, False otherwise
+        """
+        pass
+        
+    @abstractmethod
+    async def publish_mqtt_image(self, topic: str, payload: bytes, retain: bool = False, qos: int = 0) -> bool:
+        """
+        Publish image bytes to a specific MQTT topic.
+        
+        Args:
+            topic: The MQTT topic to publish to
+            payload: The raw image bytes to publish
+            retain: Whether the message should be retained
+            qos: Quality of Service level
+            
+        Returns:
+            True if publishing was successful, False otherwise
         """
         pass
 

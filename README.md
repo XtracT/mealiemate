@@ -20,8 +20,8 @@ MealieMate is a collection of Python scripts bundled in a service that integrate
 4. **Shopping List Generator**  
    Consolidates ingredients from your upcoming meal plan into a single structured shopping list in Mealie. The AI intelligently combines similar items, standardizes quantities, and organizes by category for easier shopping.
 
-5. **Mealplan Fetcher**  
-   Gets the mealplan for the next 7 days and makes it available in Home Assistant, including direct links to every recipe. Also generates a visually appealing image that can be sent via Telegram using a bot.
+5. **Mealplan Fetcher**
+   Gets the mealplan for the next 7 days and makes it available in Home Assistant, including direct links to every recipe. Also generates a visually appealing image and publishes it via MQTT. This automatically creates an `image` entity in Home Assistant (e.g., `image.mealiemate_meal_plan_image`) for display. Other services can subscribe to the image topic (`mealiemate/mealplan_fetcher/mealplan_image/image`) to receive the raw PNG bytes.
 
 6. **Neapolitan Pizza Calculator**  
    Calculates precise dough ingredients and fermentation schedules for Neapolitan-style pizza based on temperature and time parameters. Uses a scientific approach to adjust yeast quantities for consistent results.
@@ -48,9 +48,9 @@ These scripts automatically register a new device named **"MealieMate"** in Home
 - Number inputs for configuration parameters
 - Text inputs for user messages and preferences
 
-### Telegram
+### MQTT Image Publishing (via Mealplan Fetcher)
 
-The Mealplan Fetcher can send generated meal plan images directly to a Telegram chat, providing an easy way to view your weekly meal plan on mobile devices.
+The Mealplan Fetcher plugin publishes the generated meal plan image as raw PNG bytes directly to the following MQTT topic: `mealiemate/mealplan_fetcher/mealplan_image/image`. Home Assistant uses this topic via the auto-discovered `image` entity, and other external services (like e-ink displays) can subscribe to this same topic to receive the image data.
 
 ---
 
@@ -81,8 +81,6 @@ services:
       HA_TOKEN: "insert_here"
       MQTT_BROKER: "192.168.XX.XX"
       MQTT_PORT: "1883"
-      TG_BOT_TOKEN: "123456789:AAbbCCddEEffGGhhIIjjKKllMMnnOO00"
-      TG_BOT_CHAT_ID: "123456789"
     restart: unless-stopped
 ```
 
@@ -108,10 +106,6 @@ services:
     - The IP address or hostname of your MQTT broker.
 - **MQTT_PORT**
     - Port number of your MQTT broker (default 1883).
-- **TG_BOT_TOKEN**
-    - Telegram bot token for sending meal plan images.
-- **TG_BOT_CHAT_ID**
-    - Telegram chat ID to send messages to.
 
 ## Contributing
 

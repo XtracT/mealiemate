@@ -102,7 +102,7 @@ def __init__(self, mqtt_service: MqttService, mealie_service: MealieApiService, 
 
 MealieMate integrates with Home Assistant through MQTT:
 
-* **Entity Discovery:** Automatically registers entities in Home Assistant
+* **Entity Discovery:** Automatically registers entities (`switch`, `sensor`, `number`, `text`, `button`, `binary_sensor`, `image`) in Home Assistant using MQTT Discovery.
 * **Configuration:** Receives configuration updates from Home Assistant
 * **Status Updates:** Publishes status information to Home Assistant
 * **User Interaction:** Processes user input from Home Assistant

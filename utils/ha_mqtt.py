@@ -330,6 +330,48 @@ async def setup_mqtt_binary_sensor(script_id: str, sensor_id: str, sensor_name: 
     except Exception as e:
         logger.error(f"Failed to setup MQTT binary sensor '{sensor_name}': {str(e)}")
         return False
+        
+async def setup_mqtt_image(plugin_id: str, image_id: str, name: str, image_topic: str) -> bool:
+    """
+    Register an MQTT image entity in Home Assistant asynchronously.
+    
+    Args:
+        plugin_id: Unique identifier for the plugin
+        image_id: Unique identifier for this specific image entity
+        name: Human-readable name for the image entity
+        image_topic: The topic where the image bytes will be published
+        
+    Returns:
+        True if registration was successful, False otherwise
+    """
+    try:
+        # Use the first identifier from DEVICE_INFO for consistency
+        base_identifier = DEVICE_INFO['identifiers'][0]
+        unique_id = f"{base_identifier}_{plugin_id}_{image_id}"
+        config_topic = f"{MQTT_DISCOVERY_PREFIX}/image/{unique_id}/config"
+
+        discovery_payload = {
+            "name": name,
+            "unique_id": unique_id,
+            "image_topic": image_topic,  # State topic where image bytes are published
+            "content_type": "image/png",
+            "icon": "mdi:image",
+            "device": DEVICE_INFO,
+            # Link availability to the main MealieMate status binary sensor
+            "availability_topic": f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/{base_identifier}_status/state", # Assuming status sensor unique_id is 'mealiemate_status'
+            "payload_available": "ON",
+            "payload_not_available": "OFF",
+        }
+
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+            # Publish an initial empty payload to the image topic to ensure HA initializes the entity
+            await client.publish(image_topic, payload=b'', retain=False)
+            logger.info(f"Registered MQTT image entity: {name} (Topic: {image_topic}) and published initial empty payload.")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to setup MQTT image entity '{name}': {str(e)}")
+        return False
 
 async def log(
     script_id: str, 
@@ -611,4 +653,26 @@ async def set_binary_sensor_state(sensor_id: str, state: str) -> bool:
             return True
     except Exception as e:
         logger.error(f"Failed to set binary sensor state for {sensor_id}: {str(e)}")
+        return False
+
+async def publish_mqtt_image(topic: str, payload: bytes, retain: bool = False, qos: int = 0) -> bool:
+    """
+    Publish raw image bytes to a specific MQTT topic.
+
+    Args:
+        topic: The MQTT topic to publish to
+        payload: The raw image bytes to publish
+        retain: Whether the message should be retained
+        qos: Quality of Service level
+
+    Returns:
+        True if publishing was successful, False otherwise
+    """
+    try:
+        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
+            await client.publish(topic, payload=payload, qos=qos, retain=retain)
+            logger.debug(f"Published image bytes to topic: {topic} ({len(payload)} bytes)")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to publish image bytes to MQTT topic '{topic}': {str(e)}")
         return False

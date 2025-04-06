@@ -8,7 +8,7 @@ the MqttService interface, making it compatible with the dependency injection sy
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 
 from core.services import MqttService
 import utils.ha_mqtt as ha_mqtt
@@ -257,3 +257,33 @@ class MqttServiceImpl(MqttService):
             True if update was successful, False otherwise
         """
         return await ha_mqtt.set_binary_sensor_state(sensor_id, state)
+        
+    async def setup_mqtt_image(self, plugin_id: str, image_id: str, name: str, image_topic: str) -> bool:
+        """
+        Register an MQTT image entity in Home Assistant.
+        
+        Args:
+            plugin_id: Unique identifier for the plugin
+            image_id: Unique identifier for this specific image entity
+            name: Human-readable name for the image entity
+            image_topic: The topic where the image bytes will be published
+            
+        Returns:
+            True if registration was successful, False otherwise
+        """
+        return await ha_mqtt.setup_mqtt_image(plugin_id, image_id, name, image_topic)
+        
+    async def publish_mqtt_image(self, topic: str, payload: bytes, retain: bool = False, qos: int = 0) -> bool:
+        """
+        Publish image bytes to a specific MQTT topic.
+        
+        Args:
+            topic: The MQTT topic to publish to
+            payload: The raw image bytes to publish
+            retain: Whether the message should be retained
+            qos: Quality of Service level
+            
+        Returns:
+            True if publishing was successful, False otherwise
+        """
+        return await ha_mqtt.publish_mqtt_image(topic, payload, retain, qos)

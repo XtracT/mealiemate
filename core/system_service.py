@@ -169,6 +169,18 @@ class SystemService:
                     # Then set its state based on the current value
                     state = "ON" if current_value else "OFF"
                     await self._mqtt_service.set_switch_state(f"{plugin.id}_{switch['id']}", state)
+
+                # Set up image entities
+                for image_id, image in entities.get("images", {}).items():
+                    # Construct the topic where the image bytes will be published
+                    image_topic = f"mealiemate/{plugin.id}/{image['id']}/image"
+                    await self._mqtt_service.setup_mqtt_image(
+                        plugin.id,
+                        image["id"],
+                        image["name"],
+                        image_topic
+                    )
+                    logger.debug(f"Registered MQTT image: {image['name']}")
                     
                 logger.debug(f"Set up MQTT entities for plugin: {plugin.id}")
             except Exception as e:
