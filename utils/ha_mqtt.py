@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Dict, Tuple, Any, Optional, Union
 from dotenv import load_dotenv
 import aiomqtt
+from aiomqtt import Client as MqttClient # Use an alias for clarity
 
 # Configure logging
 logging.basicConfig(
@@ -37,6 +38,25 @@ if not MQTT_BROKER:
 
 # Buffers used to store log text for each sensor before publishing
 log_buffers: Dict[Tuple[str, str], str] = {}
+
+# Global reference to the main MQTT client (set by core/app.py)
+_main_client_ref: Optional[MqttClient] = None
+
+def set_main_client_ref(client: MqttClient) -> None:
+    """Sets the global reference to the main MQTT client."""
+    global _main_client_ref
+    if client:
+        logger.info("Setting main MQTT client reference.")
+        _main_client_ref = client
+    else:
+        logger.warning("Attempted to set main MQTT client reference to None.")
+        _main_client_ref = None # Allow unsetting if needed
+
+def _get_client() -> Optional[MqttClient]:
+    """Gets the main MQTT client reference, logging an error if not set."""
+    if not _main_client_ref:
+        logger.error("Main MQTT client reference (_main_client_ref) not set. Cannot publish.")
+    return _main_client_ref
 
 # Log level constants
 DEBUG = logging.DEBUG
@@ -107,11 +127,14 @@ async def setup_mqtt_switch(script_id: str, script_name: str) -> bool:
             "icon": "mdi:script-text-outline"
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            await client.publish(state_topic, "OFF", retain=True)
-            logger.info(f"Registered MQTT switch: {script_name}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        await client.publish(state_topic, "OFF", retain=True) # Publish initial state
+        logger.info(f"Registered MQTT switch: {script_name}")
+        return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT switch '{script_name}': {str(e)}")
         return False
@@ -144,9 +167,13 @@ async def setup_mqtt_sensor(script_id: str, sensor_id: str, sensor_name: str) ->
             "device": DEVICE_INFO,
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            logger.info(f"Registered MQTT sensor: {sensor_name}")
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        # No initial state needed for timestamp sensor, but clear buffer
+        logger.info(f"Registered MQTT sensor: {sensor_name}")
 
         log_buffers[(script_id, sensor_id)] = ""
         return True
@@ -201,11 +228,14 @@ async def setup_mqtt_number(
             "device": DEVICE_INFO
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            await client.publish(state_topic, str(default_value), retain=True)
-            logger.info(f"Registered MQTT number: {number_name} with default value {default_value}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        await client.publish(state_topic, str(default_value), retain=True) # Publish initial state
+        logger.info(f"Registered MQTT number: {number_name} with default value {default_value}")
+        return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT number '{number_name}': {str(e)}")
         return False
@@ -249,11 +279,14 @@ async def setup_mqtt_text(
             "device": DEVICE_INFO
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            await client.publish(state_topic, str(default_value), retain=True)
-            logger.info(f"Registered MQTT text: {text_name}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        await client.publish(state_topic, str(default_value), retain=True) # Publish initial state
+        logger.info(f"Registered MQTT text: {text_name}")
+        return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT text '{text_name}': {str(e)}")
         return False
@@ -284,10 +317,14 @@ async def setup_mqtt_button(script_id: str, button_id: str, button_name: str) ->
             "device": DEVICE_INFO,
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            logger.info(f"Registered MQTT button: {button_name}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        # Buttons don't have state, just config
+        logger.info(f"Registered MQTT button: {button_name}")
+        return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT button '{button_name}': {str(e)}")
         return False
@@ -321,12 +358,15 @@ async def setup_mqtt_binary_sensor(script_id: str, sensor_id: str, sensor_name: 
             "device": DEVICE_INFO,
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            # Also publish initial state to ensure the entity is available immediately
-            await client.publish(state_topic, "ON", retain=True)
-            logger.info(f"Registered MQTT binary sensor: {sensor_name}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        # Also publish initial state to ensure the entity is available immediately
+        await client.publish(state_topic, "ON", retain=True)
+        logger.info(f"Registered MQTT binary sensor: {sensor_name}")
+        return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT binary sensor '{sensor_name}': {str(e)}")
         return False
@@ -363,12 +403,15 @@ async def setup_mqtt_image(plugin_id: str, image_id: str, name: str, image_topic
             "payload_not_available": "OFF",
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            # Publish an initial empty payload to the image topic to ensure HA initializes the entity
-            await client.publish(image_topic, payload=b'', retain=False)
-            logger.info(f"Registered MQTT image entity: {name} (Topic: {image_topic}) and published initial empty payload.")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        # Publish an initial empty payload to the image topic to ensure HA initializes the entity
+        await client.publish(image_topic, payload=b'', retain=False)
+        logger.info(f"Registered MQTT image entity: {name} (Topic: {image_topic}) and published initial empty payload.")
+        return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT image entity '{name}': {str(e)}")
         return False
@@ -443,21 +486,24 @@ async def log(
     state_value = datetime.now(timezone.utc).isoformat()
 
     try:
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(state_topic, state_value, retain=True)
+        client = _get_client()
+        if not client:
+            return False # Error logged in _get_client
+
+        await client.publish(state_topic, state_value, retain=True)
+        
+        # Create attributes dictionary with full_text
+        attributes = {"full_text": log_buffers[(script_id, sensor_id)]}
+        
+        # Add any extra attributes if provided
+        if extra_attributes:
+            attributes.update(extra_attributes)
             
-            # Create attributes dictionary with full_text
-            attributes = {"full_text": log_buffers[(script_id, sensor_id)]}
-            
-            # Add any extra attributes if provided
-            if extra_attributes:
-                attributes.update(extra_attributes)
-                
-            await client.publish(
-                attributes_topic,
-                json.dumps(attributes),
-                retain=True
-            )
+        await client.publish(
+            attributes_topic,
+            json.dumps(attributes),
+            retain=True
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to publish log message to MQTT: {str(e)}")
@@ -525,13 +571,16 @@ async def setup_mqtt_progress(script_id: str, sensor_id: str, sensor_name: str) 
             "device": DEVICE_INFO,
         }
 
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
-            # Initialize with 0%
-            await client.publish(state_topic, "0", retain=True)
-            await client.publish(attributes_topic, json.dumps({"activity": ""}), retain=True)
-            logger.info(f"Registered MQTT progress sensor: {sensor_name}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(config_topic, json.dumps(discovery_payload), retain=True)
+        # Initialize with 0%
+        await client.publish(state_topic, "0", retain=True)
+        await client.publish(attributes_topic, json.dumps({"activity": ""}), retain=True)
+        logger.info(f"Registered MQTT progress sensor: {sensor_name}")
+        return True
     except Exception as e:
         logger.error(f"Failed to setup MQTT progress sensor '{sensor_name}': {str(e)}")
         return False
@@ -563,13 +612,16 @@ async def reset_sensor(script_id: str, sensor_id: str) -> bool:
     state_value = datetime.now(timezone.utc).isoformat()
     
     try:
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(state_topic, state_value, retain=True)
-            await client.publish(
-                attributes_topic,
-                json.dumps({"full_text": ""}),
-                retain=True
-            )
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(state_topic, state_value, retain=True) # Update timestamp
+        await client.publish(
+            attributes_topic,
+            json.dumps({"full_text": ""}), # Clear attributes text
+            retain=True
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to reset sensor {script_id}_{sensor_id}: {str(e)}")
@@ -602,11 +654,14 @@ async def update_progress(script_id: str, sensor_id: str, percentage: int, activ
         elif percentage == 0 and activity.lower() == "stopped":
             activity = "Stopped"
         
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(state_topic, str(percentage), retain=True)
-            await client.publish(attributes_topic, json.dumps({"activity": activity}), retain=True)
-            logger.debug(f"Updated progress for {script_id}: {percentage}% - {activity}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(state_topic, str(percentage), retain=True)
+        await client.publish(attributes_topic, json.dumps({"activity": activity}), retain=True)
+        logger.debug(f"Updated progress for {script_id}_{sensor_id}: {percentage}% - {activity}") # Corrected log message
+        return True
     except Exception as e:
         logger.error(f"Failed to update progress for {script_id}: {str(e)}")
         return False
@@ -625,10 +680,13 @@ async def set_switch_state(switch_id: str, state: str) -> bool:
     try:
         state_topic = f"{MQTT_DISCOVERY_PREFIX}/switch/{switch_id}/state"
         
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(state_topic, payload=state, retain=True)
-            logger.debug(f"Set switch state for {switch_id} to {state}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(state_topic, payload=state, retain=True)
+        logger.debug(f"Set switch state for {switch_id} to {state}")
+        return True
     except Exception as e:
         logger.error(f"Failed to set switch state for {switch_id}: {str(e)}")
         return False
@@ -647,10 +705,13 @@ async def set_binary_sensor_state(sensor_id: str, state: str) -> bool:
     try:
         state_topic = f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/{sensor_id}/state"
         
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(state_topic, payload=state, retain=True)
-            logger.debug(f"Set binary sensor state for {sensor_id} to {state}")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(state_topic, payload=state, retain=True)
+        logger.debug(f"Set binary sensor state for {sensor_id} to {state}")
+        return True
     except Exception as e:
         logger.error(f"Failed to set binary sensor state for {sensor_id}: {str(e)}")
         return False
@@ -669,10 +730,13 @@ async def publish_mqtt_image(topic: str, payload: bytes, retain: bool = False, q
         True if publishing was successful, False otherwise
     """
     try:
-        async with aiomqtt.Client(MQTT_BROKER, MQTT_PORT) as client:
-            await client.publish(topic, payload=payload, qos=qos, retain=retain)
-            logger.debug(f"Published image bytes to topic: {topic} ({len(payload)} bytes)")
-            return True
+        client = _get_client()
+        if not client:
+            return False
+            
+        await client.publish(topic, payload=payload, qos=qos, retain=retain)
+        logger.debug(f"Published image bytes to topic: {topic} ({len(payload)} bytes)")
+        return True
     except Exception as e:
         logger.error(f"Failed to publish image bytes to MQTT topic '{topic}': {str(e)}")
         return False

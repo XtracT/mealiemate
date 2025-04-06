@@ -25,7 +25,7 @@ from core.system_service import SystemService
 from services.mqtt_service import MqttServiceImpl
 from services.mealie_api_service import MealieApiServiceImpl
 from services.gpt_service import GptServiceImpl
-
+import utils.ha_mqtt as ha_mqtt # Import the utils module
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ class MealieMateApp:
         self._background_tasks: List[asyncio.Task] = []
         self._shutdown_event = asyncio.Event()
         self._mqtt_message_queue = asyncio.Queue()
+        self._mqtt_connected_event = asyncio.Event() # Event to signal MQTT connection
     
     async def initialize(self) -> None:
         """Initialize all components."""
@@ -102,16 +103,32 @@ class MealieMateApp:
             return
             
         try:
-            # First, connect to MQTT and receive any retained messages
-            await mqtt_service.info("mealiemate", "Connecting to MQTT broker and processing retained messages", category="start")
-            
+            # Start the MQTT listener task first
+            await mqtt_service.info("mealiemate", "Starting MQTT listener...", category="start")
+            listener_task = asyncio.create_task(self._mqtt_listener())
+            self._background_tasks.append(listener_task)
+
+            # Wait for the MQTT listener to connect and set the client reference
             try:
-                # Process retained messages before setting up MQTT entities
+                logger.info("Waiting for MQTT connection...")
+                await asyncio.wait_for(self._mqtt_connected_event.wait(), timeout=30.0) # Wait up to 30 seconds
+                logger.info("MQTT connected and client reference set.")
+            except asyncio.TimeoutError:
+                logger.critical("Timeout waiting for MQTT connection. Cannot proceed with setup.")
+                await mqtt_service.critical("mealiemate", "Timeout waiting for MQTT connection.")
+                # Trigger shutdown if connection fails
+                self._shutdown_event.set()
+                await self.shutdown() # Attempt graceful shutdown
+                return # Stop further execution
+
+            # Now that the client reference is set, process retained messages
+            await mqtt_service.info("mealiemate", "Processing retained messages", category="config")
+            try:
                 await self._process_retained_messages()
             except Exception as e:
                 logger.error(f"Error processing retained messages: {str(e)}", exc_info=True)
                 await mqtt_service.error("mealiemate", f"Error processing retained messages: {str(e)}")
-                # Continue with startup even if retained message processing fails
+                # Continue startup, but log the error
             
             # Now set up MQTT entities with the updated configuration
             await self._system_service.setup_mqtt_entities()
@@ -121,9 +138,7 @@ class MealieMateApp:
             await mqtt_service.info("mealiemate", "Resetting special sensors on service startup", category="config")
             await self._system_service.reset_special_sensors()
 
-            # Start the regular MQTT listener and message processor
-            listener_task = asyncio.create_task(self._mqtt_listener())
-            self._background_tasks.append(listener_task)
+            # Start the MQTT message processor task (listener already started)
             
             processor_task = asyncio.create_task(self._mqtt_message_processor())
             self._background_tasks.append(processor_task)
@@ -300,6 +315,11 @@ class MealieMateApp:
                 await client.publish(state_topic, payload="ON", retain=True)
                 logger.info("MQTT service online")
                 
+                # Set the global client reference in ha_mqtt utils
+                ha_mqtt.set_main_client_ref(client)
+                # Signal that the MQTT client is connected and reference is set
+                self._mqtt_connected_event.set()
+                
                 # Subscribe to control topics
                 await client.subscribe(f"{mqtt_discovery_prefix}/switch/+/set")
                 await client.subscribe(f"{mqtt_discovery_prefix}/number/+/set")
@@ -317,6 +337,11 @@ class MealieMateApp:
             logger.info("MQTT listener task cancelled")
         except Exception as e:
             logger.error(f"MQTT listener error: {str(e)}")
+        finally:
+            # Ensure the client reference is cleared when the listener stops
+            logger.info("Clearing main MQTT client reference.")
+            ha_mqtt.set_main_client_ref(None)
+            self._mqtt_connected_event.clear() # Clear event if connection drops/stops
     
     async def _mqtt_message_processor(self) -> None:
         """

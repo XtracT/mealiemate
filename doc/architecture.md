@@ -106,7 +106,7 @@ MealieMate integrates with Home Assistant through MQTT:
 * **Configuration:** Receives configuration updates from Home Assistant
 * **Status Updates:** Publishes status information to Home Assistant
 * **User Interaction:** Processes user input from Home Assistant
-
+* **Shared Client:** The main application (`core/app.py`) manages a single, persistent MQTT client connection. This connection is used for listening to incoming messages and is also shared (via `utils/ha_mqtt.py`) for all outgoing publishing operations (like entity setup and status updates) to improve efficiency.
 ## 5. Coding Guidelines
 
 ### 5.1. General Principles
