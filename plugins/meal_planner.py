@@ -308,10 +308,8 @@ class MealPlannerPlugin(Plugin):
             
             mealplan_items = await self._mealie.get_meal_plan(start_date, end_date)
             if not mealplan_items:
-                error_msg = "No meal plan data available."
-                await self._mqtt.warning(self.id, error_msg)
-                logger.warning(error_msg)
-                return
+                await self._mqtt.info(self.id, "No existing meal plan found — starting fresh.", category="data")
+                mealplan_items = []
             
             logger.info(f"Fetched {len(mealplan_items)} meal plan entries")
             
