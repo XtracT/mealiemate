@@ -191,53 +191,44 @@ class IngredientMergerPlugin(Plugin):
             )
             
             # Construct prompt for GPT
-            prompt = (
-                "You are a culinary expert analyzing recipe ingredients. "
-                "Your task is to identify ingredients that are EXACT DUPLICATES but have different names. "
-                "We are STRICTLY looking for the same ingredient with different naming conventions, "
-                "NOT organizing ingredients into categories.\n\n"
-                "Examples of ingredients that should be merged (EXACT DUPLICATES with different names):\n"
-                "- 'heavy cream' and 'cream 15% fat' (same exact ingredient, different naming)\n"
-                "- 'parmesan' and 'parmeggiano' (same cheese, different spelling/language)\n"
-                "- 'scallion' and 'green onion' (same exact ingredient, different regional names)\n\n"
-                "Examples of ingredients that should NOT be merged (NOT exact duplicates):\n"
-                "- 'garlic cloves' and 'garlic powder' (different forms)\n"
-                "- 'fresh tomatoes' and 'sun-dried tomatoes' (different preparation)\n"
-                "- 'lemon juice' and 'lemon zest' (different parts)\n"
-                "- 'red bell pepper' and 'green bell pepper' (different varieties)\n"
-                "- 'white wine' and 'red wine' (different varieties)\n"
-                "- 'onion' and 'yellow onion' (one is specific, one is general)\n\n"
-                "- 'different cheeses or ingredients that might be used interchangeably but are still not the same"
-                "STRICT rules for merging:\n"
-                "1. ONLY merge ingredients that are EXACTLY the same thing with different names\n"
-                "2. DO NOT merge ingredients that are in different forms (fresh vs. dried, whole vs. powder)\n"
-                "3. DO NOT merge ingredients that have different preparation methods\n"
-                "4. DO NOT merge ingredients that come from different parts of the same source\n"
-                "5. DO NOT merge different varieties of an ingredient\n"
-                "6. DO NOT merge general ingredients with specific varieties\n\n"
-                "Here is a list of ingredients from various recipes:\n"
-                f"{', '.join(batch)}\n\n"
-                "Analyze this list and identify sets of ingredients that should be merged. "
-                "For each set, provide:\n"
-                "1. The ingredients that should be merged\n"
-                "2. A recommended standardized name - Preferring the american english name. IMPORTANT: You must choose one of the existing ingredient names from the list, do not create a new name\n"
-                "3. A brief explanation of why they should be merged\n\n"
-                "Return your analysis in the following JSON format:\n"
+            system_message = (
+                "Identify recipe ingredients that are the same thing with different names. "
+                "Only suggest merges for exact duplicates — not different forms, preparations, "
+                "parts, or varieties of the same ingredient.\n\n"
+                "Merge examples (same ingredient, different name):\n"
+                "- 'heavy cream' / 'cream 15% fat'\n"
+                "- 'parmesan' / 'parmeggiano'\n"
+                "- 'scallion' / 'green onion'\n\n"
+                "Do NOT merge examples (different things):\n"
+                "- 'garlic cloves' / 'garlic powder' (different form)\n"
+                "- 'fresh tomatoes' / 'sun-dried tomatoes' (different preparation)\n"
+                "- 'lemon juice' / 'lemon zest' (different part)\n"
+                "- 'red bell pepper' / 'green bell pepper' (different variety)\n"
+                "- 'white wine' / 'red wine' (different variety)\n\n"
+                "Rules:\n"
+                "- Only merge ingredients that are exactly the same thing with different names.\n"
+                "- Do not merge different forms (fresh vs. dried, whole vs. powder).\n"
+                "- Do not merge different preparations or varieties.\n"
+                "- The recommended name must be one of the existing names from the list, "
+                "preferring American English.\n\n"
+                "Return JSON:\n"
                 "{\n"
                 '  "merge_suggestions": [\n'
-                "    {\n"
-                '      "ingredients": ["ingredient1", "ingredient2", ...],\n'
-                '      "recommended_name": "one of the existing ingredient names",\n'
-                '      "reason": "brief explanation"\n'
-                "    },\n"
-                "    ...\n"
+                '    {"ingredients": ["name1", "name2"], "recommended_name": "chosen name", "reason": "why"}\n'
                 "  ]\n"
                 "}\n\n"
-                "If you don't find any ingredients that should be merged in this batch, return an empty array for merge_suggestions."
+                "If no merges are found, return an empty array."
             )
-            
-            # Call GPT
-            messages = [{"role": "user", "content": prompt}]
+
+            user_message = (
+                "Ingredients to analyze:\n"
+                f"{', '.join(batch)}"
+            )
+
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ]
             logger.debug(f"Sending batch {batch_num} to GPT")
             result = await self._gpt.gpt_json_chat(messages, temperature=self._temperature)
             
