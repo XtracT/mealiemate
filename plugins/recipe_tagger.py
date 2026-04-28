@@ -301,11 +301,11 @@ class RecipeTaggerPlugin(Plugin):
         return ingredients
 
     async def execute(self) -> None:
+        """Execute the recipe tagger plugin."""
         # Reset sensors
         for sensor_id in self.reset_sensors:
             await self._mqtt.reset_sensor(self.id, sensor_id)
 
-        """Execute the recipe tagger plugin."""
         try:
             # Update progress
             await self._mqtt.update_progress(self.id, "progress", 0, "Starting recipe tagging")

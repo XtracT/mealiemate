@@ -42,7 +42,6 @@ class PluginManager:
         # Track running tasks, plugin instances, and configurations
         self._running_tasks: Dict[str, asyncio.Task] = {}
         self._running_plugin_instances: Dict[str, Plugin] = {}
-        self._plugin_configs: Dict[str, Dict[str, Any]] = {}
         
         # Track all plugin instances (both running and non-running)
         self._plugin_instances: Dict[str, Plugin] = {}
