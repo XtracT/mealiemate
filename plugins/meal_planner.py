@@ -49,18 +49,17 @@ class MealPlannerPlugin(Plugin):
         
         # GPT system prompt configuration
         self._default_config = (
-            "You are a **meal planner AI** responsible for generating structured, healthy, and balanced meal plans "
-            "based on the given meal catalog, user constraints, and existing plans.\n\n"
-            
-            "### Input You Will Receive\n"
-            "- A list of available recipes with:\n"
-            "  - Recipe `ID`, `name`, `description`, `tags`, and `categories`.\n"
-            "- The current meal plan with assigned meals for each date.\n"
-            "- User preferences and constraints (e.g., available ingredients, specific cravings).\n"
-            "- The number of days to generate meals for.\n\n"
-            
-            "### Output Format (STRICTLY FOLLOW)\n"
-            "Return a **valid JSON object** in the **EXACT format below**:\n\n"
+            "Generate a meal plan as JSON. Fill in missing days only, do not modify existing meals.\n\n"
+            "Rules:\n"
+            "- Pizza on Friday dinner only, once per week.\n"
+            "- Salads are preferred for dinners.\n"
+            "- Ensure daily balance of protein, vegetables, and carbs.\n"
+            "- Do not repeat the same main ingredient two days in a row.\n"
+            "- Avoid recipes used in the last two weeks when possible.\n"
+            "- Weekend lunches can be heavier than weekdays.\n"
+            "- All meals must be real recipe IDs from the catalog.\n"
+            "- Prioritize user requests while maintaining balance.\n\n"
+            "Output format (return only this JSON, no extra text):\n"
             "{\n"
             '    "mealPlan": {\n'
             '        "YYYY-MM-DD": {\n'
@@ -68,33 +67,8 @@ class MealPlannerPlugin(Plugin):
             '            "Dinner": "recipe_id"\n'
             "        }\n"
             "    },\n"
-            '    "feedback": "Short summary of the generated plan, highlighting improvements and suggestions."\n'
-            "}\n\n"
-            
-            "- **DO NOT modify existing meals.** Only return missing days.\n"
-            "- **DO NOT change, reorder, or rename recipe IDs.** Use them **exactly** as provided.\n"
-            "- **DO NOT include unchanged days in the response.**\n\n"
-            
-            "### Meal Plan Rules\n"
-            "**✅ Required:**\n"
-            "- **Pizza:** Scheduled **once per week**, only on **Friday dinner**.\n"
-            "- **Salads:** Preferably for **dinners** to keep meals light.\n"
-            "- **Balanced Variety:** Ensure **protein, vegetables, and carbs** are included daily.\n"
-            "- **Diversity:** Avoid repeating the **same main ingredient** two days in a row.\n"
-            "- **Rotation:** Avoid selecting the same recipes as the previous two weeks when possible."
-            "- **User Priorities:** Consider ingredients that are expiring soon (if provided).\n\n"
-            
-            "**❌ Forbidden:**\n"
-            "- **No disclaimers or extra text.** Do not include 'As an AI, I...' statements.\n"
-            "- **No generic placeholders.** All meals must be real recipes from the dataset.\n"
-            "- **No random selections.** Each meal must be chosen based on user constraints.\n\n"
-            
-            "### 🔹 Special Considerations\n"
-            "- **For missing meals:** Select from the meal catalog based on tags/categories.\n"
-            "- **For weekends:** Lunch can be **slightly heavier** than weekdays.\n"
-            "- **If input includes user requests:** Prioritize fulfilling them while maintaining balance.\n\n"
-            
-            "🚨 **Failure to follow these instructions will result in rejection of the output.**"
+            '    "feedback": "Brief summary of choices and suggestions."\n'
+            "}"
         )
     
     @property
@@ -176,20 +150,20 @@ class MealPlannerPlugin(Plugin):
         Returns:
             Tuple of (meal_plan_dict, feedback_string)
         """
-        await self._mqtt.gpt_decision(self.id, "Asking ChatGPT to Generate Mealplan...")
+        await self._mqtt.gpt_decision(self.id, "Generating meal plan with AI...")
         logger.info(f"Generating meal plan for {len(days)} days with user message: {user_message[:50]}...")
 
         # Prepare data for GPT
-        system_prompt_data = {
+        user_content = json.dumps({
             "days": days,
             "recipesCatalog": recipes,
             "currentMealPlan": mealplan,
-            "notes": self._default_config
-        }
+            "userRequest": user_message
+        }, indent=2)
 
         messages = [
-            {"role": "system", "content": json.dumps(system_prompt_data, indent=2)},
-            {"role": "user", "content": user_message}
+            {"role": "system", "content": self._default_config},
+            {"role": "user", "content": user_content}
         ]
 
         # Call GPT
