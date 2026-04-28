@@ -19,6 +19,7 @@ from core.plugin_registry import PluginRegistry
 from core.plugin_manager import PluginManager
 from core.container import Container
 from core.services import MqttService
+import utils.gpt_utils as gpt_utils
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -188,6 +189,17 @@ class SystemService:
 
         # Set up overall service status indicator
         await self._mqtt_service.setup_mqtt_binary_sensor("mealiemate_status", "", "MealieMate Status")
+
+        # Set up AI provider configuration entities
+        await self._mqtt_service.setup_mqtt_text(
+            "mealiemate", "model_name", "AI Model",
+            default_value=gpt_utils.get_model(),
+            max_length=200
+        )
+        await self._mqtt_service.setup_mqtt_switch("mealiemate_use_openrouter", "Use OpenRouter")
+        if gpt_utils.get_use_openrouter():
+            await self._mqtt_service.set_switch_state("mealiemate_use_openrouter", "ON")
+        
         await self._mqtt_service.success("mealiemate", "MQTT entity setup complete")
     
 

@@ -520,18 +520,16 @@ class GptService(ABC):
     async def gpt_json_chat(
         self, 
         messages: List[Dict[str, str]], 
-        model: str = "gpt-4o", 
         temperature: float = 0.1,
         max_retries: int = 2,
         retry_delay: float = 1.0
     ) -> Dict[str, Any]:
         """
-        Sends a series of messages to OpenAI Chat Completion with JSON output and
+        Sends a series of messages to AI provider with JSON output and
         returns a Python dict if JSON can be parsed, or an empty dict on failure.
 
         Args:
             messages: A list of {"role": "...", "content": "..."} chat messages
-            model: Which model to use (e.g. "gpt-4o")
             temperature: The temperature for the completion (0.0 to 2.0)
             max_retries: Maximum number of retry attempts on transient errors
             retry_delay: Delay between retries in seconds

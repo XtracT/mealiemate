@@ -19,6 +19,7 @@ from core.plugin_registry import PluginRegistry
 from core.container import Container
 from core.services import MqttService
 from core.plugin_manager import PluginManager
+import utils.gpt_utils as gpt_utils
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -41,6 +42,10 @@ class MqttMessageHandler:
         self._mqtt_service = container.resolve(MqttService)
         if not self._mqtt_service:
             raise ValueError("MQTT service not found in container")
+        
+        # System-level config entity IDs (not plugin-scoped)
+        self._system_text_entities = {"model_name"}
+        self._system_switch_entities = {"use_openrouter"}
 
     async def process_message(self, topic: str, payload: str) -> None:
         """
@@ -56,6 +61,14 @@ class MqttMessageHandler:
         # If topic includes "mealiemate_" as a prefix, remove it
         if raw_id.startswith("mealiemate_"):
             raw_id = raw_id.removeprefix("mealiemate_")
+
+        # Check for system-level config entities first
+        if "text" in topic and raw_id in self._system_text_entities:
+            await self._handle_system_text(raw_id, payload)
+            return
+        if "switch" in topic and raw_id in self._system_switch_entities:
+            await self._handle_system_switch(raw_id, payload)
+            return
 
         plugin_id = None
         entity_id = ""
@@ -263,3 +276,23 @@ class MqttMessageHandler:
                 logger.warning(f"Running plugin instance doesn't have expected event attribute: {event_attr}")
         else:
             logger.warning(f"Button press received for {plugin_id}_{entity_id}, but plugin is not running")
+
+    async def _handle_system_text(self, entity_id: str, payload: str) -> None:
+        """Handle a system-level text config update."""
+        if entity_id == "model_name":
+            model = payload.strip()
+            if model:
+                gpt_utils.set_model(model)
+                await self._mqtt_service.info("mealiemate", f"AI model changed to: {model}", category="config")
+            else:
+                await self._mqtt_service.warning("mealiemate", "Ignoring empty model name")
+
+    async def _handle_system_switch(self, entity_id: str, payload: str) -> None:
+        """Handle a system-level switch config update."""
+        if entity_id == "use_openrouter":
+            enabled = payload == "ON"
+            gpt_utils.set_use_openrouter(enabled)
+            state = "ON" if enabled else "OFF"
+            await self._mqtt_service.set_switch_state("mealiemate_use_openrouter", state)
+            provider = "OpenRouter" if enabled else "OpenAI"
+            await self._mqtt_service.info("mealiemate", f"Switched to {provider}", category="config")
