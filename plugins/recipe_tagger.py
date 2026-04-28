@@ -134,32 +134,39 @@ class RecipeTaggerPlugin(Plugin):
         Returns:
             Tuple of (valid_tags, valid_category)
         """
-        # Clean and validate ingredients
         clean_ingredients = [i.strip() for i in ingredients if i and i.strip()]
         if not clean_ingredients:
             logger.warning(f"Recipe '{name}' has no valid ingredients, skipping classification")
             await self._mqtt.warning(self.id, f"Recipe '{name}' has no valid ingredients, skipping classification.")
             return [], None
 
-        # Construct prompt for GPT
-        prompt = (
-            "You are a recipe classification assistant. "
-            "Classify the following recipe strictly using predefined tags and categories. "
-            "DO NOT invent new tags or categories.\n\n"
-            f"Recipe Name: '{name}'\n"
-            f"Ingredients: {', '.join(clean_ingredients)}\n\n"
+        system_message = (
+            "Classify recipes into tags and a category. "
+            "Only use tags and categories from the allowed lists. "
+            "Assign 1-3 tags from different tag groups when applicable. "
+            "Return only valid JSON.\n\n"
             f"Allowed Tags:\n"
             f"- Main Ingredients: {', '.join(self._available_tags['Main Ingredient Category'])}\n"
             f"- Nutritional Profile: {', '.join(self._available_tags['Nutritional Profile and Dietary Preferences'])}\n"
             f"- Time & Effort: {', '.join(self._available_tags['Time & Effort'])}\n\n"
-            f"Allowed Categories:\n"
-            f"- {', '.join(self._available_categories)}\n\n"
-            "Return JSON in the following format:\n"
-            '{"tags": ["tag1", "tag2"], "category": "chosen_category"}'
+            f"Allowed Categories: {', '.join(self._available_categories)}\n\n"
+            "Example:\n"
+            "Recipe: 'Chicken Caesar Salad' - Ingredients: chicken breast, romaine lettuce, parmesan, croutons, caesar dressing\n"
+            '{"tags": ["Poultry", "Quick"], "category": "Salad"}\n\n'
+            "Example:\n"
+            "Recipe: 'Vegan Black Bean Tacos' - Ingredients: black beans, corn tortillas, avocado, lime, cilantro\n"
+            '{"tags": ["Legumes", "Vegan", "Quick"], "category": "Dinner"}'
         )
 
-        # Call GPT
-        messages = [{"role": "user", "content": prompt}]
+        user_message = (
+            f"Recipe: '{name}'\n"
+            f"Ingredients: {', '.join(clean_ingredients)}"
+        )
+
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ]
         logger.debug(f"Classifying recipe: {name}")
         result = await self._gpt.gpt_json_chat(messages, temperature=self._temperature)
 
