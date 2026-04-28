@@ -219,58 +219,39 @@ class ShoppingListGeneratorPlugin(Plugin):
         Returns:
             Cleaned and organized shopping list
         """
-        await self._mqtt.gpt_decision(self.id, "Using GPT to clean up the shopping list...")
+        await self._mqtt.gpt_decision(self.id, "Cleaning up shopping list with AI...")
         logger.info(f"Cleaning up shopping list with {len(ingredients)} ingredients")
 
-        # Sort ingredients for more consistent GPT processing
         ingredients_sorted = sorted(ingredients, key=lambda x: x["name"].lower())
         
-        # Prepare prompt for GPT
-        prompt_content = {
-            "ingredients": ingredients_sorted,
-            "instructions": {
-                "role": "system",
-                "content": (
-                "You are a grocery shopping assistant. Given the list of ingredients below, "
-                "combine similar items and adjust the quantities to realistic package sizes. "
-                "Ensure items are grouped logically by category for easier shopping. Categories include:\n\n"
-                "- **Dairy** (Milk, Cheese, Butter, Yogurt)\n"
-                "- **Meats** (Chicken, Beef, Pork, etc.)\n"
-                "- **Fish** (Cod, Daurade, Salmon, etc.)\n"
-                "- **Spices** (Salt, Pepper, Garlic Powder, etc.)\n"
-                "- **Condiments** (Vinegar, Soy Sauce, etc.)\n"
-                "- **Nuts** (Nuts, peanuts, etc.)\n"
-                "- **Vegetables** (Onions, Tomatoes, Garlic, Mushrooms, etc.)\n"
-                "- **Fruits** (Oranges, Apples, Bananas, etc.)\n"
-                "- **Grains & Baking** (Flour, Rice, Pasta, Bread, Yeast)\n"
-                "- **Canned & Packaged Goods** (Canned Beans, Sun-dried Tomatoes, etc.)\n"
-                "- **Oils & Liquids** (Olive Oil, Vinegar, Beer, etc)\n\n"
-                "Rules:\n"
-                "1. Maintain consistent categories across runs.\n"
-                "2. Use standard package sizes (e.g., 1L milk, 500g flour, 12 eggs).\n"
-                "3. Retain at least one item per unique ingredient.\n"
-                "4. If an ingredient is missing a quantity or unit, flag it in the `feedback` field.\n"
-                "5. If an item does not fit into any category, add it under 'Other' and note it in `feedback`.\n"
-                "6. Include a `feedback` field explaining any issues or strange merges.\n"
-                "7. DO NOT REMOVE any ingredients unless absolutely necessary.\n\n"
-                "**Example JSON Response:**\n"
-                "{\n"
-                '  "shopping_list": [\n'
-                '    { "name": "Salt", "quantity": "500", "unit": "g", "category": "Spices", "merged_items": ["5 tsp salt", "1 tsp salt"] },\n'
-                '    { "name": "Eggs", "quantity": "12", "unit": "", "category": "Dairy", "merged_items": ["1 egg", "2 eggs", "9 eggs"] },\n'
-                '    { "name": "Onions", "quantity": "3", "unit": "", "category": "Vegetables", "merged_items": ["1 onion", "2 onions"] }\n'
-                "  ],\n"
-                '  "feedback": [\n'
-                '    "⚠️ Item `unknown ingredient` did not fit into any category and was placed under `Other`.",\n'
-                '    "⚠️ The ingredient `2 handfuls of flour` had a non-standard quantity and was interpreted as 200g." \n'
-                "  ]\n"
-                "}"
-                )
-            }
-        }
+        system_message = (
+            "Consolidate grocery ingredients into a clean shopping list. "
+            "Combine duplicates, adjust quantities to standard package sizes, "
+            "and assign each item to a category.\n\n"
+            "Categories: Dairy, Meats, Fish, Spices, Condiments, Nuts, "
+            "Vegetables, Fruits, Grains & Baking, Canned & Packaged Goods, "
+            "Oils & Liquids, Other.\n\n"
+            "Rules:\n"
+            "- Use standard package sizes (e.g., 1L milk, 500g flour, 12 eggs).\n"
+            "- Keep at least one item per unique ingredient.\n"
+            "- Flag missing quantities or non-standard units in feedback.\n"
+            "- Place uncategorizable items under 'Other' and note in feedback.\n"
+            "- Do not remove ingredients unless absolutely necessary.\n\n"
+            "Output JSON format:\n"
+            "{\n"
+            '  "shopping_list": [\n'
+            '    {"name": "Salt", "quantity": "500", "unit": "g", "category": "Spices", "merged_items": ["5 tsp salt", "1 tsp salt"]}\n'
+            "  ],\n"
+            '  "feedback": ["Item X had non-standard quantity, interpreted as 200g."]\n'
+            "}"
+        )
 
-        # Call GPT
-        messages = [{"role": "user", "content": json.dumps(prompt_content)}]
+        user_message = json.dumps({"ingredients": ingredients_sorted})
+
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ]
         result = await self._gpt.gpt_json_chat(messages, temperature=self._temperature)
         
         # Process results
