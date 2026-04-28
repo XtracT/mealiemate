@@ -196,9 +196,6 @@ class SystemService:
             default_value=gpt_utils.get_model(),
             max_length=200
         )
-        await self._mqtt_service.setup_mqtt_switch("mealiemate_use_openrouter", "Use OpenRouter")
-        if gpt_utils.get_use_openrouter():
-            await self._mqtt_service.set_switch_state("mealiemate_use_openrouter", "ON")
         
         await self._mqtt_service.success("mealiemate", "MQTT entity setup complete")
     
