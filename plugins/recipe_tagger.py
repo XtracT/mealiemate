@@ -22,6 +22,7 @@ from typing import Dict, List, Tuple, Optional, Set, Any
 
 from core.plugin import Plugin
 from core.services import MqttService, MealieApiService, GptService
+from utils.gpt_utils import GptQuotaExceeded
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -348,6 +349,7 @@ class RecipeTaggerPlugin(Plugin):
             logger.debug(f"Preloaded {len(all_tags)} tags and {len(all_categories)} categories")
 
             # 3. Process each recipe
+            consecutive_failures = 0
             for index, recipe in enumerate(recipes):
                 try:
                     # Calculate percentage (leave 10% for final processing)
@@ -377,6 +379,7 @@ class RecipeTaggerPlugin(Plugin):
 
                     # Classify recipe using GPT
                     new_tags, new_category = await self.classify_recipe_with_gpt(recipe["name"], ingredients)
+                    consecutive_failures = 0
                     
                     # Update recipe if we have tags or category
                     if new_tags or new_category:
@@ -396,10 +399,24 @@ class RecipeTaggerPlugin(Plugin):
                         progress = f"Progress: {index+1}/{len(recipes)} recipes processed"
                         await self._mqtt.progress(self.id, progress)
                     
+                except GptQuotaExceeded:
+                    await self._mqtt.error(
+                        self.id,
+                        "OpenAI quota exhausted. Aborting — fix billing and try again."
+                    )
+                    raise
+                    
                 except Exception as e:
                     logger.error(f"Error processing recipe {recipe.get('slug', 'unknown')}: {str(e)}", exc_info=True)
                     await self._mqtt.error(self.id, f"Error processing recipe: {str(e)}")
                     stats["errors"] += 1
+                    consecutive_failures += 1
+                    if consecutive_failures >= 5:
+                        await self._mqtt.error(
+                            self.id,
+                            f"Too many consecutive errors ({consecutive_failures}). Aborting."
+                        )
+                        return
 
             # 4. Log completion
             summary = (

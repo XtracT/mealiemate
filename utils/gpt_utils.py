@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 import asyncio
 
 # Configure logging
@@ -47,6 +47,11 @@ if USE_OPENROUTER:
 else:
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
+class GptQuotaExceeded(Exception):
+    """Raised when the GPT API quota is exhausted and retries won't help."""
+    pass
+
+
 async def gpt_json_chat(
     messages: List[Dict[str, str]], 
     temperature: float = 0.1,
@@ -65,6 +70,9 @@ async def gpt_json_chat(
         
     Returns:
         Parsed JSON response as dictionary or empty dict on failure
+        
+    Raises:
+        GptQuotaExceeded: If the API quota is exhausted (non-retryable)
     """
     retry_count = 0
     
@@ -98,9 +106,21 @@ async def gpt_json_chat(
                 return {}
                 
         except asyncio.CancelledError:
-            # Re-raise cancellations so they propagate properly
             logger.warning("Request to OpenAI was cancelled")
             raise
+            
+        except RateLimitError as e:
+            error_body = str(e)
+            if "insufficient_quota" in error_body:
+                logger.error(f"OpenAI quota exhausted — not retrying: {str(e)}")
+                raise GptQuotaExceeded(f"OpenAI quota exhausted: {str(e)}")
+            retry_count += 1
+            if retry_count <= max_retries:
+                logger.warning(f"Rate limited by OpenAI API: {str(e)}. Retrying ({retry_count}/{max_retries})...")
+                await asyncio.sleep(retry_delay * retry_count)
+            else:
+                logger.error(f"Failed to get response from OpenAI after {max_retries} retries: {str(e)}")
+                return {}
             
         except Exception as e:
             retry_count += 1
@@ -111,5 +131,4 @@ async def gpt_json_chat(
                 logger.error(f"Failed to get response from OpenAI after {max_retries} retries: {str(e)}")
                 return {}
     
-    # This should never be reached due to the return in the final else clause above
     return {}
