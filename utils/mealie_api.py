@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-MEALIE_URL = os.getenv("MEALIE_URL") or "http://192.168.1.61:9925"
+MEALIE_URL = os.getenv("MEALIE_URL")
+if not MEALIE_URL:
+    logger.error("MEALIE_URL not found in environment variables")
 MEALIE_API_KEY = os.getenv("MEALIE_TOKEN")
 
 if not MEALIE_API_KEY:

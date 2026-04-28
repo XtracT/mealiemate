@@ -2,17 +2,12 @@
 aiohttp>=3.8.5
 aiomqtt>=1.2.0
 python-dotenv>=1.0.0
-pydantic>=2.0.0
 
 # OpenAI API
 openai>=1.0.0
 
 # Image processing
 Pillow>=10.0.0
-
-
-# Logging and monitoring
-structlog>=23.1.0
 
 # Testing (optional)
 pytest>=7.4.0

@@ -1,0 +1,43 @@
+[project]
+name = "mealiemate"
+version = "0.2.0"
+description = "AI-powered meal planning, recipe management, and shopping list generation via Home Assistant and Mealie"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.8.5",
+    "aiomqtt>=1.2.0",
+    "python-dotenv>=1.0.0",
+    "openai>=1.0.0",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "black>=23.7.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.1",
+    "flake8>=6.1.0",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E501"]
