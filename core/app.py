@@ -284,16 +284,15 @@ class MealieMateApp:
         """
         Listen for MQTT messages and add them to the processing queue.
         
-        This function sets up an MQTT client with a Last Will and Testament message
-        to indicate when the service goes offline, then subscribes to relevant topics
-        and forwards messages to the processing queue.
+        Automatically reconnects on connection loss with exponential backoff.
+        Sets up a Last Will and Testament so Home Assistant marks the device
+        offline if the service dies.
         """
         mqtt_service = self._container.resolve(MqttService)
         if not mqtt_service:
             logger.error("MQTT service not found in container")
             return
         
-        # Get MQTT broker and port from environment variables
         mqtt_broker = os.getenv("MQTT_BROKER")
         mqtt_port = int(os.getenv("MQTT_PORT", 1883))
         mqtt_discovery_prefix = "homeassistant"
@@ -302,45 +301,47 @@ class MealieMateApp:
             logger.error("MQTT_BROKER not found in environment variables")
             return
         
-        # Set up Last Will and Testament message for service status
         state_topic = f"{mqtt_discovery_prefix}/binary_sensor/mealiemate_status/state"
         
-        try:
-            import aiomqtt
-            will_msg = aiomqtt.Will(topic=state_topic, payload="OFF", qos=1, retain=True)
-            
-            async with aiomqtt.Client(mqtt_broker, mqtt_port, will=will_msg, timeout=5) as client:
-                # Publish initial online status
-                await client.publish(state_topic, payload="ON", retain=True)
-                logger.info("MQTT service online")
+        import aiomqtt
+        
+        reconnect_delay = 1
+        
+        while not self._shutdown_event.is_set():
+            try:
+                will_msg = aiomqtt.Will(topic=state_topic, payload="OFF", qos=1, retain=True)
                 
-                # Set the global client reference in ha_mqtt utils
-                ha_mqtt.set_main_client_ref(client)
-                # Signal that the MQTT client is connected and reference is set
-                self._mqtt_connected_event.set()
-                
-                # Subscribe to control topics
-                await client.subscribe(f"{mqtt_discovery_prefix}/switch/+/set")
-                await client.subscribe(f"{mqtt_discovery_prefix}/number/+/set")
-                await client.subscribe(f"{mqtt_discovery_prefix}/text/+/set")
-                await client.subscribe(f"{mqtt_discovery_prefix}/button/+/command")
-                logger.debug("Subscribed to MQTT control topics")
-                
-                # Process incoming messages
-                async for message in client.messages:
-                    topic = str(message.topic)
-                    payload = message.payload.decode()
-                    logger.debug(f"Received MQTT message: {topic} = {payload}")
-                    await self._mqtt_message_queue.put((topic, payload))
-        except asyncio.CancelledError:
-            logger.info("MQTT listener task cancelled")
-        except Exception as e:
-            logger.error(f"MQTT listener error: {str(e)}")
-        finally:
-            # Ensure the client reference is cleared when the listener stops
-            logger.info("Clearing main MQTT client reference.")
-            ha_mqtt.set_main_client_ref(None)
-            self._mqtt_connected_event.clear() # Clear event if connection drops/stops
+                async with aiomqtt.Client(mqtt_broker, mqtt_port, will=will_msg, timeout=5) as client:
+                    await client.publish(state_topic, payload="ON", retain=True)
+                    logger.info("MQTT service online")
+                    reconnect_delay = 1
+                    
+                    ha_mqtt.set_main_client_ref(client)
+                    self._mqtt_connected_event.set()
+                    
+                    await client.subscribe(f"{mqtt_discovery_prefix}/switch/+/set")
+                    await client.subscribe(f"{mqtt_discovery_prefix}/number/+/set")
+                    await client.subscribe(f"{mqtt_discovery_prefix}/text/+/set")
+                    await client.subscribe(f"{mqtt_discovery_prefix}/button/+/command")
+                    logger.debug("Subscribed to MQTT control topics")
+                    
+                    async for message in client.messages:
+                        topic = str(message.topic)
+                        payload = message.payload.decode()
+                        logger.debug(f"Received MQTT message: {topic} = {payload}")
+                        await self._mqtt_message_queue.put((topic, payload))
+            except asyncio.CancelledError:
+                logger.info("MQTT listener task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"MQTT connection lost: {str(e)}. Reconnecting in {reconnect_delay}s...")
+                ha_mqtt.set_main_client_ref(None)
+                self._mqtt_connected_event.clear()
+                await asyncio.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 2, 30)
+        
+        ha_mqtt.set_main_client_ref(None)
+        self._mqtt_connected_event.clear()
     
     async def _mqtt_message_processor(self) -> None:
         """
