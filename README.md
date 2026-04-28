@@ -1,6 +1,6 @@
 # MealieMate
 
-MealieMate is a collection of Python scripts bundled in a service that integrate with [Mealie](https://github.com/hay-kot/mealie), [Home Assistant](https://www.home-assistant.io/), and [MQTT](https://mqtt.org/) to provide advanced meal planning, recipe tagging, and shopping list generation—powered by OpenAI GPT. Each script can be controlled via switches in Home Assistant, and logs its progress and feedback in several sensors.
+MealieMate is a collection of Python scripts bundled in a service that integrate with [Mealie](https://github.com/hay-kot/mealie), [Home Assistant](https://www.home-assistant.io/), and [MQTT](https://mqtt.org/) to provide advanced meal planning, recipe tagging, and shopping list generation—powered by AI via [OpenRouter](https://openrouter.ai/). Each script can be controlled via switches in Home Assistant, and logs its progress and feedback in several sensors.
 
 *Disclaimer*: This is a project to help me learn different things, I am just sharing it openly to learn even more. 
 
@@ -9,7 +9,7 @@ MealieMate is a collection of Python scripts bundled in a service that integrate
 ## Features
 
 1. **Recipe Tagger**  
-   Uses GPT to classify your Mealie recipes with appropriate tags and categories automatically. The AI analyzes recipe ingredients and names to assign relevant tags from predefined categories.
+   Uses AI to classify your Mealie recipes with appropriate tags and categories automatically. The AI analyzes recipe ingredients and names to assign relevant tags from predefined categories.
 
 2. **Ingredient Merger**  
    Identifies ingredients across recipes that are exact duplicates but have different names (like "heavy cream" and "cream 15% fat", or "parmesan" and "parmeggiano"). Provides a standardized name and lists all recipes containing these ingredients for easier database cleanup.
@@ -35,9 +35,9 @@ MealieMate is a collection of Python scripts bundled in a service that integrate
 
 The tools perform API requests to Mealie using HTTP. A token from your Mealie instance is required to authenticate. The integration handles recipe fetching, meal plan management, and shopping list creation.
 
-### OpenAI GPT
+### OpenRouter
 
-The tools send relevant data and instructions to the `gpt-4o` model for processing. The integration includes retry logic, error handling, and optimized prompts for consistent results. An API token from OpenAI is needed to enable GPT functionality.
+All AI features use [OpenRouter](https://openrouter.ai/) to access a wide range of models (GPT-4o, DeepSeek, Claude, etc.). An API key from [openrouter.ai/keys](https://openrouter.ai/keys) is required. The default model is `deepseek/deepseek-r1-zero:free` but can be changed at runtime from Home Assistant via the **AI Model** text input—no restart needed. See [openrouter.ai/models](https://openrouter.ai/models) for available models.
 
 ### Home Assistant
 
@@ -47,6 +47,7 @@ These scripts automatically register a new device named **"MealieMate"** in Home
 - Sensors to display script output and status
 - Number inputs for configuration parameters
 - Text inputs for user messages and preferences
+- An **AI Model** text input to change the OpenRouter model at runtime
 
 ### MQTT Image Publishing (via Mealplan Fetcher)
 
@@ -64,8 +65,6 @@ For detailed YAML configurations to set up your Home Assistant dashboard with Me
 Below is a recommended Docker Compose configuration:
 
 ```yaml
-version: "3.8"
-
 services:
   mealiemate:
     container_name: "mealiemate"
@@ -73,12 +72,8 @@ services:
     environment:
       MEALIE_URL: "http://192.168.XX.XX:XXXX"
       MEALIE_TOKEN: "insert_here"
-      OPENAI_API_KEY: "insert_here"
-      USE_OPENROUTER: "false"
       OPENROUTER_API_KEY: "insert_here"
       OPENROUTER_MODEL: "deepseek/deepseek-r1-zero:free"
-      HA_URL: "http://192.168.XX.XX:8123"
-      HA_TOKEN: "insert_here"
       MQTT_BROKER: "192.168.XX.XX"
       MQTT_PORT: "1883"
     restart: unless-stopped
@@ -86,26 +81,15 @@ services:
 
 ### Environment Variables
 
-- **MEALIE_URL**
-    - Base URL for your Mealie instance.
-- **MEALIE_TOKEN**
-    - Your Mealie API token.
-- **OPENAI_API_KEY**
-    - Your OpenAI API key for GPT calls (required if not using OpenRouter). If you want to use OpenRouter, leave this empty.
-- **USE_OPENROUTER** (optional)
-    - Set to "true" to use OpenRouter instead of OpenAI. Defaults to "false".
-- **OPENROUTER_API_KEY**
-    - Your OpenRouter API key. Required when using OpenRouter.
-- **OPENROUTER_MODEL** (optional)
-    - The model to use with OpenRouter. Defaults to "deepseek/deepseek-r1-zero:free". See https://openrouter.ai/docs#models for a list of available models.
-- **HA_URL**
-    - Base URL for Home Assistant, if you're calling any of its services.
-- **HA_TOKEN**
-    - A Long-Lived Access Token for Home Assistant, if needed for updates.
-- **MQTT_BROKER**
-    - The IP address or hostname of your MQTT broker.
-- **MQTT_PORT**
-    - Port number of your MQTT broker (default 1883).
+| Variable | Required | Description |
+|---|---|---|
+| `MEALIE_URL` | Yes | Base URL for your Mealie instance |
+| `MEALIE_TOKEN` | Yes | Your Mealie API token |
+| `OPENROUTER_API_KEY` | Yes | Your [OpenRouter API key](https://openrouter.ai/keys) |
+| `OPENROUTER_MODEL` | No | Default model (default: `deepseek/deepseek-r1-zero:free`). Can be changed at runtime via Home Assistant |
+| `MQTT_BROKER` | Yes | IP address or hostname of your MQTT broker |
+| `MQTT_PORT` | No | MQTT broker port (default: `1883`) |
+| `LOG_LEVEL` | No | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` (default: `INFO`) |
 
 ## Contributing
 
@@ -116,12 +100,12 @@ Contributions are welcome! Here's how you can help:
 - Add or update documentation as necessary.
 - Open a Pull Request with a clear description of changes.
 
-You can refer to the [archictecture](doc/architecture.md) for further clarification of how Mealiemate is designed. 
+You can refer to the [architecture](doc/architecture.md) for further clarification of how Mealiemate is designed. 
 
 Areas for improvement:
 
 - Unit tests for core functionality
-- Additional GPT-powered features
+- Additional AI-powered features
 - UI improvements for Home Assistant integration
 - Performance optimizations
 - Documentation enhancements
