@@ -67,14 +67,30 @@ EMOJI_MAP = {
     "success": "🎉",
 }
 
-# Common device info used across all entities
-DEVICE_INFO = {
+# Root device info (for system-level entities: status sensor, AI model config)
+ROOT_DEVICE_INFO: Dict[str, Any] = {
     "identifiers": ["mealiemate"],
     "name": "MealieMate",
-    "manufacturer": "Custom Script",
+    "manufacturer": "MealieMate",
     "model": "MealieMate",
     "sw_version": "0.2"
 }
+
+
+def get_device_info(plugin_id: str, plugin_name: str) -> Dict[str, Any]:
+    """Build per-plugin device info for HA MQTT discovery.
+
+    Plugin devices are linked as children of the root MealieMate device
+    via ``via_device``, creating a parent-child hierarchy in HA.
+    """
+    return {
+        "identifiers": [f"mealiemate_{plugin_id}"],
+        "name": f"MealieMate - {plugin_name}",
+        "manufacturer": "MealieMate",
+        "model": "MealieMate Plugin",
+        "sw_version": "0.2",
+        "via_device": ("mealiemate",),
+    }
 
 
 class MqttStateManager:
@@ -107,7 +123,8 @@ class MqttStateManager:
     # Entity setup methods
     # ------------------------------------------------------------------
 
-    async def setup_mqtt_switch(self, script_id: str, script_name: str) -> bool:
+    async def setup_mqtt_switch(self, script_id: str, script_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
             unique_id = f"{script_id}"
             state_topic = f"{MQTT_DISCOVERY_PREFIX}/switch/{unique_id}/state"
@@ -119,7 +136,7 @@ class MqttStateManager:
                 "command_topic": command_topic,
                 "state_topic": state_topic,
                 "unique_id": unique_id,
-                "device": DEVICE_INFO,
+                "device": device,
                 "payload_on": "ON",
                 "payload_off": "OFF",
                 "optimistic": False,
@@ -138,7 +155,8 @@ class MqttStateManager:
             logger.error(f"Failed to setup MQTT switch '{script_name}': {str(e)}")
             return False
 
-    async def setup_mqtt_sensor(self, script_id: str, sensor_id: str, sensor_name: str) -> bool:
+    async def setup_mqtt_sensor(self, script_id: str, sensor_id: str, sensor_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
             unique_id = f"{script_id}_{sensor_id}"
             state_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{unique_id}/state"
@@ -152,7 +170,7 @@ class MqttStateManager:
                 "unique_id": unique_id,
                 "device_class": "timestamp",
                 "icon": "mdi:clipboard-text",
-                "device": DEVICE_INFO,
+                "device": device,
             }
 
             client = self._get_client()
@@ -176,8 +194,10 @@ class MqttStateManager:
         min_value: int = 1,
         max_value: int = 1000,
         step: int = 1,
-        unit: str = ""
+        unit: str = "",
+        device_info: Optional[Dict[str, Any]] = None
     ) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
             unique_id = f"{script_id}_{number_id}"
             state_topic = f"{MQTT_DISCOVERY_PREFIX}/number/{unique_id}/state"
@@ -196,7 +216,7 @@ class MqttStateManager:
                 "unit_of_measurement": unit,
                 "retain": True,
                 "icon": "mdi:numeric",
-                "device": DEVICE_INFO
+                "device": device
             }
 
             client = self._get_client()
@@ -217,8 +237,10 @@ class MqttStateManager:
         text_id: str,
         text_name: str,
         default_value: str = "",
-        max_length: int = 255
+        max_length: int = 255,
+        device_info: Optional[Dict[str, Any]] = None
     ) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
             unique_id = f"{script_id}_{text_id}"
             state_topic = f"{MQTT_DISCOVERY_PREFIX}/text/{unique_id}/state"
@@ -234,7 +256,7 @@ class MqttStateManager:
                 "max": max_length,
                 "retain": True,
                 "icon": "mdi:form-textbox",
-                "device": DEVICE_INFO
+                "device": device
             }
 
             client = self._get_client()
@@ -249,7 +271,8 @@ class MqttStateManager:
             logger.error(f"Failed to setup MQTT text '{text_name}': {str(e)}")
             return False
 
-    async def setup_mqtt_button(self, script_id: str, button_id: str, button_name: str) -> bool:
+    async def setup_mqtt_button(self, script_id: str, button_id: str, button_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
             unique_id = f"{script_id}_{button_id}"
             command_topic = f"{MQTT_DISCOVERY_PREFIX}/button/{unique_id}/command"
@@ -261,7 +284,7 @@ class MqttStateManager:
                 "unique_id": unique_id,
                 "payload_press": "PRESS",
                 "icon": "mdi:gesture-tap-button",
-                "device": DEVICE_INFO,
+                "device": device,
             }
 
             client = self._get_client()
@@ -275,7 +298,8 @@ class MqttStateManager:
             logger.error(f"Failed to setup MQTT button '{button_name}': {str(e)}")
             return False
 
-    async def setup_mqtt_binary_sensor(self, script_id: str, sensor_id: str, sensor_name: str) -> bool:
+    async def setup_mqtt_binary_sensor(self, script_id: str, sensor_id: str, sensor_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
             unique_id = script_id if not sensor_id else f"{script_id}_{sensor_id}"
             state_topic = f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/{unique_id}/state"
@@ -289,7 +313,7 @@ class MqttStateManager:
                 "payload_off": "OFF",
                 "device_class": "running",
                 "icon": "mdi:check-circle-outline",
-                "device": DEVICE_INFO,
+                "device": device,
             }
 
             client = self._get_client()
@@ -304,9 +328,10 @@ class MqttStateManager:
             logger.error(f"Failed to setup MQTT binary sensor '{sensor_name}': {str(e)}")
             return False
 
-    async def setup_mqtt_image(self, plugin_id: str, image_id: str, name: str, image_topic: str) -> bool:
+    async def setup_mqtt_image(self, plugin_id: str, image_id: str, name: str, image_topic: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
-            base_identifier = DEVICE_INFO['identifiers'][0]
+            base_identifier = ROOT_DEVICE_INFO['identifiers'][0]
             unique_id = f"{base_identifier}_{plugin_id}_{image_id}"
             config_topic = f"{MQTT_DISCOVERY_PREFIX}/image/{unique_id}/config"
 
@@ -316,7 +341,7 @@ class MqttStateManager:
                 "image_topic": image_topic,
                 "content_type": "image/png",
                 "icon": "mdi:image",
-                "device": DEVICE_INFO,
+                "device": device,
                 "availability_topic": f"{MQTT_DISCOVERY_PREFIX}/binary_sensor/{base_identifier}_status/state",
                 "payload_available": "ON",
                 "payload_not_available": "OFF",
@@ -334,7 +359,8 @@ class MqttStateManager:
             logger.error(f"Failed to setup MQTT image entity '{name}': {str(e)}")
             return False
 
-    async def setup_mqtt_progress(self, script_id: str, sensor_id: str, sensor_name: str) -> bool:
+    async def setup_mqtt_progress(self, script_id: str, sensor_id: str, sensor_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        device = device_info or ROOT_DEVICE_INFO
         try:
             unique_id = f"{script_id}_{sensor_id}"
             state_topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/{unique_id}/state"
@@ -348,7 +374,7 @@ class MqttStateManager:
                 "unique_id": unique_id,
                 "unit_of_measurement": "%",
                 "icon": "mdi:percent",
-                "device": DEVICE_INFO,
+                "device": device,
             }
 
             client = self._get_client()
@@ -565,11 +591,11 @@ _default_manager = MqttStateManager()
 def set_main_client_ref(client: Optional[MqttClient]) -> None:
     _default_manager.set_main_client_ref(client)
 
-async def setup_mqtt_switch(script_id: str, script_name: str) -> bool:
-    return await _default_manager.setup_mqtt_switch(script_id, script_name)
+async def setup_mqtt_switch(script_id: str, script_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+    return await _default_manager.setup_mqtt_switch(script_id, script_name, device_info)
 
-async def setup_mqtt_sensor(script_id: str, sensor_id: str, sensor_name: str) -> bool:
-    return await _default_manager.setup_mqtt_sensor(script_id, sensor_id, sensor_name)
+async def setup_mqtt_sensor(script_id: str, sensor_id: str, sensor_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+    return await _default_manager.setup_mqtt_sensor(script_id, sensor_id, sensor_name, device_info)
 
 async def setup_mqtt_number(
     script_id: str,
@@ -579,27 +605,29 @@ async def setup_mqtt_number(
     min_value: int = 1,
     max_value: int = 1000,
     step: int = 1,
-    unit: str = ""
+    unit: str = "",
+    device_info: Optional[Dict[str, Any]] = None
 ) -> bool:
-    return await _default_manager.setup_mqtt_number(script_id, number_id, number_name, default_value, min_value, max_value, step, unit)
+    return await _default_manager.setup_mqtt_number(script_id, number_id, number_name, default_value, min_value, max_value, step, unit, device_info)
 
 async def setup_mqtt_text(
     script_id: str,
     text_id: str,
     text_name: str,
     default_value: str = "",
-    max_length: int = 255
+    max_length: int = 255,
+    device_info: Optional[Dict[str, Any]] = None
 ) -> bool:
-    return await _default_manager.setup_mqtt_text(script_id, text_id, text_name, default_value, max_length)
+    return await _default_manager.setup_mqtt_text(script_id, text_id, text_name, default_value, max_length, device_info)
 
-async def setup_mqtt_button(script_id: str, button_id: str, button_name: str) -> bool:
-    return await _default_manager.setup_mqtt_button(script_id, button_id, button_name)
+async def setup_mqtt_button(script_id: str, button_id: str, button_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+    return await _default_manager.setup_mqtt_button(script_id, button_id, button_name, device_info)
 
-async def setup_mqtt_binary_sensor(script_id: str, sensor_id: str, sensor_name: str) -> bool:
-    return await _default_manager.setup_mqtt_binary_sensor(script_id, sensor_id, sensor_name)
+async def setup_mqtt_binary_sensor(script_id: str, sensor_id: str, sensor_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+    return await _default_manager.setup_mqtt_binary_sensor(script_id, sensor_id, sensor_name, device_info)
 
-async def setup_mqtt_image(plugin_id: str, image_id: str, name: str, image_topic: str) -> bool:
-    return await _default_manager.setup_mqtt_image(plugin_id, image_id, name, image_topic)
+async def setup_mqtt_image(plugin_id: str, image_id: str, name: str, image_topic: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+    return await _default_manager.setup_mqtt_image(plugin_id, image_id, name, image_topic, device_info)
 
 async def log(
     script_id: str,
@@ -638,8 +666,8 @@ async def progress(script_id: str, message: str, sensor_id: Optional[str] = None
 async def success(script_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
     return await _default_manager.success(script_id, message, sensor_id, extra_attributes)
 
-async def setup_mqtt_progress(script_id: str, sensor_id: str, sensor_name: str) -> bool:
-    return await _default_manager.setup_mqtt_progress(script_id, sensor_id, sensor_name)
+async def setup_mqtt_progress(script_id: str, sensor_id: str, sensor_name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+    return await _default_manager.setup_mqtt_progress(script_id, sensor_id, sensor_name, device_info)
 
 async def reset_sensor(script_id: str, sensor_id: str) -> bool:
     return await _default_manager.reset_sensor(script_id, sensor_id)

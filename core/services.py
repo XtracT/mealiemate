@@ -14,32 +14,13 @@ class MqttService(ABC):
     """Interface for MQTT service."""
     
     @abstractmethod
-    async def setup_mqtt_switch(self, plugin_id: str, name: str) -> bool:
-        """
-        Register an MQTT switch in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            name: Human-readable name for the switch
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+    async def setup_mqtt_switch(self, plugin_id: str, name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Register an MQTT switch in Home Assistant."""
         pass
     
     @abstractmethod
-    async def setup_mqtt_sensor(self, plugin_id: str, sensor_id: str, name: str) -> bool:
-        """
-        Register an MQTT sensor in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            sensor_id: Unique identifier for this specific sensor
-            name: Human-readable name for the sensor
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+    async def setup_mqtt_sensor(self, plugin_id: str, sensor_id: str, name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Register an MQTT sensor in Home Assistant."""
         pass
     
     @abstractmethod
@@ -52,24 +33,10 @@ class MqttService(ABC):
         min_value: int = 1, 
         max_value: int = 1000, 
         step: int = 1, 
-        unit: str = ""
+        unit: str = "",
+        device_info: Optional[Dict[str, Any]] = None
     ) -> bool:
-        """
-        Register an MQTT Number entity in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            number_id: Unique identifier for this specific number input
-            name: Human-readable name for the number input
-            default_value: Initial value for the number
-            min_value: Minimum allowed value
-            max_value: Maximum allowed value
-            step: Step size for incrementing/decrementing
-            unit: Unit of measurement (optional)
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+        """Register an MQTT Number entity in Home Assistant."""
         pass
     
     @abstractmethod
@@ -79,67 +46,25 @@ class MqttService(ABC):
         text_id: str, 
         name: str, 
         default_value: str = "", 
-        max_length: int = 255
+        max_length: int = 255,
+        device_info: Optional[Dict[str, Any]] = None
     ) -> bool:
-        """
-        Register an MQTT Text entity in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            text_id: Unique identifier for this specific text input
-            name: Human-readable name for the text input
-            default_value: Initial value for the text field
-            max_length: Maximum allowed length for the text
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+        """Register an MQTT Text entity in Home Assistant."""
         pass
     
     @abstractmethod
-    async def setup_mqtt_button(self, plugin_id: str, button_id: str, name: str) -> bool:
-        """
-        Register an MQTT button in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            button_id: Unique identifier for this specific button
-            name: Human-readable name for the button
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+    async def setup_mqtt_button(self, plugin_id: str, button_id: str, name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Register an MQTT button in Home Assistant."""
         pass
     
     @abstractmethod
-    async def setup_mqtt_binary_sensor(self, plugin_id: str, sensor_id: str, name: str) -> bool:
-        """
-        Register an MQTT binary sensor in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            sensor_id: Unique identifier for this specific binary sensor
-            name: Human-readable name for the binary sensor
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+    async def setup_mqtt_binary_sensor(self, plugin_id: str, sensor_id: str, name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Register an MQTT binary sensor in Home Assistant."""
         pass
     
     @abstractmethod
-    async def setup_mqtt_image(self, plugin_id: str, image_id: str, name: str, image_topic: str) -> bool:
-        """
-        Register an MQTT image entity in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            image_id: Unique identifier for this specific image entity
-            name: Human-readable name for the image entity
-            image_topic: The topic where the image bytes will be published
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+    async def setup_mqtt_image(self, plugin_id: str, image_id: str, name: str, image_topic: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Register an MQTT image entity in Home Assistant."""
         pass
     
     @abstractmethod
@@ -213,18 +138,8 @@ class MqttService(ABC):
         pass
         
     @abstractmethod
-    async def setup_mqtt_progress(self, plugin_id: str, sensor_id: str, name: str) -> bool:
-        """
-        Register an MQTT progress sensor in Home Assistant.
-        
-        Args:
-            plugin_id: Unique identifier for the plugin
-            sensor_id: Unique identifier for this specific sensor
-            name: Human-readable name for the sensor
-            
-        Returns:
-            True if registration was successful, False otherwise
-        """
+    async def setup_mqtt_progress(self, plugin_id: str, sensor_id: str, name: str, device_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Register an MQTT progress sensor in Home Assistant."""
         pass
 
     @abstractmethod

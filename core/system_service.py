@@ -19,6 +19,7 @@ from core.plugin_registry import PluginRegistry
 from core.plugin_manager import PluginManager
 from core.container import Container
 from core.services import MqttService
+from utils.ha_mqtt import get_device_info, ROOT_DEVICE_INFO
 import utils.gpt_utils as gpt_utils
 
 # Configure logging
@@ -66,19 +67,23 @@ class SystemService:
                 # Get or create plugin instance (with configuration already applied)
                 plugin = self._plugin_manager.get_or_create_instance(plugin_id)
                 
+                # Build per-plugin device info for HA device grouping
+                device = get_device_info(plugin.id, plugin.name)
+                
                 # Get MQTT entity configuration from the plugin
                 entities = plugin.get_mqtt_entities()
                 
                 # Set up switch for enabling/disabling the plugin
                 if entities.get("switch", False):
-                    await self._mqtt_service.setup_mqtt_switch(plugin.id, plugin.name)
+                    await self._mqtt_service.setup_mqtt_switch(plugin.id, plugin.name, device)
 
                 # Set up sensors for plugin output
                 for sensor_id, sensor in entities.get("sensors", {}).items():
                     await self._mqtt_service.setup_mqtt_sensor(
                         plugin.id, 
                         sensor["id"], 
-                        sensor["name"]
+                        sensor["name"],
+                        device
                     )
                     
                     # Initialize progress sensors to 0 with blank activity
@@ -86,24 +91,21 @@ class SystemService:
                         await self._mqtt_service.setup_mqtt_progress(
                             plugin.id,
                             sensor["id"],
-                            sensor["name"]
+                            sensor["name"],
+                            device
                         )
                         await self._mqtt_service.update_progress(plugin.id, sensor["id"], 0, "")
 
                 # Set up number inputs for plugin configuration
                 for number_id, number in entities.get("numbers", {}).items():
-                    # Check if the number entity has type, min, max, step, and unit
                     min_value = number.get("min", 1)
                     max_value = number.get("max", 1000)
                     step = number.get("step", 1)
                     unit = number.get("unit", "")
                     
-                    # Get the current value from the plugin instance
-                    # This will reflect any retained messages that were processed
                     attr_name = f"_{number_id}"
                     current_value = getattr(plugin, attr_name, number["value"]) if hasattr(plugin, attr_name) else number["value"]
                     
-                    # Log the value we're using (default or from configuration)
                     if hasattr(plugin, attr_name):
                         logger.debug(f"Setting up number {plugin.id}_{number_id} with configured value {current_value}")
                     else:
@@ -113,21 +115,19 @@ class SystemService:
                         plugin.id,
                         number["id"],
                         number["name"],
-                        current_value,  # Use current value from plugin instance
+                        current_value,
                         min_value,
                         max_value,
                         step,
-                        unit
+                        unit,
+                        device
                     )
 
                 # Set up text inputs for plugin configuration
                 for text_id, text in entities.get("texts", {}).items():
-                    # Get the current value from the plugin instance
-                    # This will reflect any retained messages that were processed
                     attr_name = f"_{text_id}"
                     current_value = getattr(plugin, attr_name, text["text"]) if hasattr(plugin, attr_name) else text["text"]
                     
-                    # Log the value we're using (default or from configuration)
                     if hasattr(plugin, attr_name):
                         logger.debug(f"Setting up text {plugin.id}_{text_id} with configured value {current_value}")
                     else:
@@ -137,7 +137,8 @@ class SystemService:
                         plugin.id,
                         text["id"],
                         text["name"],
-                        current_value  # Use current value from plugin instance
+                        current_value,
+                        device_info=device
                     )
                     
                 # Set up buttons for plugin interaction
@@ -145,41 +146,39 @@ class SystemService:
                     await self._mqtt_service.setup_mqtt_button(
                         plugin.id,
                         button["id"],
-                        button["name"]
+                        button["name"],
+                        device
                     )
                     logger.debug(f"Registered MQTT button: {button['name']}")
                     
                 # Set up additional switches for plugin configuration
                 for switch_id, switch in entities.get("switches", {}).items():
-                    # Get the current value from the plugin instance
                     attr_name = f"_{switch_id}"
                     current_value = getattr(plugin, attr_name, switch.get("value", False)) if hasattr(plugin, attr_name) else switch.get("value", False)
                     
-                    # Log the value we're using (default or from configuration)
                     if hasattr(plugin, attr_name):
                         logger.debug(f"Setting up switch {plugin.id}_{switch_id} with configured value {current_value}")
                     else:
                         logger.debug(f"Setting up switch {plugin.id}_{switch_id} with default value {current_value}")
                     
-                    # First set up the switch entity
                     await self._mqtt_service.setup_mqtt_switch(
                         f"{plugin.id}_{switch['id']}",
-                        switch["name"]
+                        switch["name"],
+                        device
                     )
                     
-                    # Then set its state based on the current value
                     state = "ON" if current_value else "OFF"
                     await self._mqtt_service.set_switch_state(f"{plugin.id}_{switch['id']}", state)
 
                 # Set up image entities
                 for image_id, image in entities.get("images", {}).items():
-                    # Construct the topic where the image bytes will be published
                     image_topic = f"mealiemate/{plugin.id}/{image['id']}/image"
                     await self._mqtt_service.setup_mqtt_image(
                         plugin.id,
                         image["id"],
                         image["name"],
-                        image_topic
+                        image_topic,
+                        device
                     )
                     logger.debug(f"Registered MQTT image: {image['name']}")
                     
@@ -187,14 +186,16 @@ class SystemService:
             except Exception as e:
                 logger.error(f"Error setting up MQTT entities for plugin {plugin_id}: {str(e)}")
 
-        # Set up overall service status indicator
-        await self._mqtt_service.setup_mqtt_binary_sensor("mealiemate_status", "", "MealieMate Status")
+        # Set up overall service status indicator (root device)
+        await self._mqtt_service.setup_mqtt_binary_sensor("mealiemate_status", "", "MealieMate Status", ROOT_DEVICE_INFO)
 
         # Set up AI provider configuration entities
+        # Set up AI provider configuration (root device)
         await self._mqtt_service.setup_mqtt_text(
             "mealiemate", "model_name", "AI Model",
             default_value=gpt_utils.get_model(),
-            max_length=200
+            max_length=200,
+            device_info=ROOT_DEVICE_INFO
         )
         
         await self._mqtt_service.success("mealiemate", "MQTT entity setup complete")
