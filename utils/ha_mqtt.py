@@ -89,7 +89,7 @@ def get_device_info(plugin_id: str, plugin_name: str) -> Dict[str, Any]:
         "manufacturer": "MealieMate",
         "model": "MealieMate Plugin",
         "sw_version": "0.2",
-        "via_device": ("mealiemate",),
+        "via_device": "mealiemate",
     }
 
 
