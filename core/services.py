@@ -173,42 +173,42 @@ class MqttService(ABC):
         pass
     
     @abstractmethod
-    async def debug(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def debug(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a debug message (not sent to Home Assistant)."""
         pass
     
     @abstractmethod
-    async def info(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def info(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log an info message."""
         pass
     
     @abstractmethod
-    async def warning(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def warning(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a warning message (sent to Home Assistant)."""
         pass
     
     @abstractmethod
-    async def error(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def error(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log an error message (sent to Home Assistant)."""
         pass
     
     @abstractmethod
-    async def critical(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None) -> bool:
+    async def critical(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, category: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a critical message (sent to Home Assistant)."""
         pass
     
     @abstractmethod
-    async def gpt_decision(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    async def gpt_decision(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a GPT decision (always sent to Home Assistant)."""
         pass
     
     @abstractmethod
-    async def progress(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    async def progress(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a progress update."""
         pass
     
     @abstractmethod
-    async def success(self, plugin_id: str, message: str, sensor_id: Optional[str] = None) -> bool:
+    async def success(self, plugin_id: str, message: str, sensor_id: Optional[str] = None, extra_attributes: Optional[Dict[str, str]] = None) -> bool:
         """Log a success message (sent to Home Assistant)."""
         pass
         

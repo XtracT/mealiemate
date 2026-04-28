@@ -247,12 +247,12 @@ class MealieMateApp:
                 await asyncio.sleep(1)
                 
                 # Process messages with a timeout
-                start_time = asyncio.get_event_loop().time()
+                start_time = asyncio.get_running_loop().time()
                 
                 # Simple approach: just process messages for a fixed time
                 while True:
                     # Check if we've been running too long
-                    current_time = asyncio.get_event_loop().time()
+                    current_time = asyncio.get_running_loop().time()
                     if current_time - start_time > timeout_seconds:
                         logger.info(f"Reached timeout after {timeout_seconds} seconds")
                         break
