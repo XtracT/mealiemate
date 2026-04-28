@@ -62,8 +62,6 @@ class MealieMateApp:
             logger.error("MQTT service not found in container")
             return
             
-        await mqtt_service.info("mealiemate", "MealieMate service initializing", category="start")
-        
         # Create plugin manager
         self._plugin_manager = PluginManager(self._registry, self._container, mqtt_service)
         
@@ -77,7 +75,7 @@ class MealieMateApp:
         # Set up signal handlers
         self._setup_signal_handlers()
         
-        await mqtt_service.info("mealiemate", "MealieMate service initialized", category="start")
+        logger.info("MealieMate service initialized")
     
     def _setup_signal_handlers(self) -> None:
         """Set up signal handlers for graceful shutdown."""
@@ -104,7 +102,7 @@ class MealieMateApp:
             
         try:
             # Start the MQTT listener task first
-            await mqtt_service.info("mealiemate", "Starting MQTT listener...", category="start")
+            logger.info("Starting MQTT listener...")
             listener_task = asyncio.create_task(self._mqtt_listener())
             self._background_tasks.append(listener_task)
 
@@ -122,6 +120,7 @@ class MealieMateApp:
                 return # Stop further execution
 
             # Now that the client reference is set, process retained messages
+            await mqtt_service.info("mealiemate", "MealieMate service connected to MQTT", category="start")
             await mqtt_service.info("mealiemate", "Processing retained messages", category="config")
             try:
                 await self._process_retained_messages()
