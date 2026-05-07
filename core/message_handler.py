@@ -280,5 +280,7 @@ class MqttMessageHandler:
             if model:
                 gpt_utils.set_model(model)
                 await self._mqtt_service.info("mealiemate", f"AI model changed to: {model}", category="config")
+                # Publish the updated state back to HA
+                await self._mqtt_service.set_text_state("mealiemate_model_name", model)
             else:
                 await self._mqtt_service.warning("mealiemate", "Ignoring empty model name")

@@ -199,6 +199,20 @@ class MqttService(ABC):
             True if update was successful, False otherwise
         """
         pass
+
+    @abstractmethod
+    async def set_text_state(self, text_id: str, state: str) -> bool:
+        """
+        Set the state of a text entity in Home Assistant.
+        
+        Args:
+            text_id: ID of the text entity (e.g. mealiemate_model_name)
+            state: New text value
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        pass
         
     @abstractmethod
     async def publish_mqtt_image(self, topic: str, payload: bytes, retain: bool = False, qos: int = 0) -> bool:

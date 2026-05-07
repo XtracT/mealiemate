@@ -113,5 +113,8 @@ class MqttServiceImpl(MqttService):
     async def set_binary_sensor_state(self, sensor_id: str, state: str) -> bool:
         return await ha_mqtt.set_binary_sensor_state(sensor_id, state)
         
+    async def set_text_state(self, text_id: str, state: str) -> bool:
+        return await ha_mqtt.set_text_state(text_id, state)
+        
     async def publish_mqtt_image(self, topic: str, payload: bytes, retain: bool = False, qos: int = 0) -> bool:
         return await ha_mqtt.publish_mqtt_image(topic, payload, retain, qos)

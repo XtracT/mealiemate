@@ -566,6 +566,21 @@ class MqttStateManager:
             logger.error(f"Failed to set binary sensor state for {sensor_id}: {str(e)}")
             return False
 
+    async def set_text_state(self, text_id: str, state: str) -> bool:
+        try:
+            state_topic = f"{MQTT_DISCOVERY_PREFIX}/text/{text_id}/state"
+
+            client = self._get_client()
+            if not client:
+                return False
+
+            await client.publish(state_topic, payload=state, retain=True)
+            logger.debug(f"Set text state for {text_id} to {state}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set text state for {text_id}: {str(e)}")
+            return False
+
     async def publish_mqtt_image(self, topic: str, payload: bytes, retain: bool = False, qos: int = 0) -> bool:
         try:
             client = self._get_client()
@@ -680,6 +695,9 @@ async def set_switch_state(switch_id: str, state: str) -> bool:
 
 async def set_binary_sensor_state(sensor_id: str, state: str) -> bool:
     return await _default_manager.set_binary_sensor_state(sensor_id, state)
+
+async def set_text_state(text_id: str, state: str) -> bool:
+    return await _default_manager.set_text_state(text_id, state)
 
 async def publish_mqtt_image(topic: str, payload: bytes, retain: bool = False, qos: int = 0) -> bool:
     return await _default_manager.publish_mqtt_image(topic, payload, retain, qos)
